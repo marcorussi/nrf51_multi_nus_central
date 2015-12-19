@@ -1,0 +1,6 @@
+TODO
+- mettere anche il ruolo peripheral assieme
+
+NEXT
+- connettersi a più di un dispositivo peripheral contemporaneamente
+- considerare se implementare UART basata su nrf_uart
