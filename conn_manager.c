@@ -36,8 +36,8 @@
 #include "softdevice_handler.h"
 
 /* nrf drivers */
-//#include "nrf.h"
-//#include "nrf_gpio.h"
+#include "nrf.h"
+#include "nrf_gpio.h"
 
 /* UTIL component */
 #include "util.h"
@@ -149,8 +149,8 @@ typedef struct
 
 /* ---------- Local variables ---------- */
 
-/* Structure to identify the Nordic UART Service. */
-static ble_nus_t                        m_nus;    
+/* Structure to identify the Nordic UART peripheral service. */
+static ble_nus_t                        m_ble_nus_p;    
 
 /* Handle of the current connection. */
 static uint16_t                         m_conn_handle = BLE_CONN_HANDLE_INVALID;    
@@ -158,7 +158,7 @@ static uint16_t                         m_conn_handle = BLE_CONN_HANDLE_INVALID;
 /* Universally unique service identifier. */
 static ble_uuid_t                       m_adv_uuids[] = {{BLE_UUID_NUS_SERVICE, NUS_SERVICE_UUID_TYPE}};  
 
-/* NUS service structure */
+/* Structure to identify the Nordic UART central service. */
 static ble_nus_c_t              m_ble_nus_c;
 
 /* Database discovery structure */
@@ -357,9 +357,9 @@ bool conn_drop_connection(void)
 }
 
 
-/* Function to send data through NUS service. 
-   TODO: consider to implement a timeout and check data_length value */
-void conn_send_data_nus(uint8_t *p_data, uint16_t data_length)
+/* Function to send data through NUS central service. 
+   TODO: consider to implement a timeout */
+void conn_send_data_c_nus(uint8_t *p_data, uint16_t data_length)
 {
 	/* if data length is greater the max allowed value */
 	if(data_length > MAX_DATA_LENGTH)
@@ -374,6 +374,29 @@ void conn_send_data_nus(uint8_t *p_data, uint16_t data_length)
 
 	/* send data but do not send termination char */
 	while (ble_nus_c_string_send(&m_ble_nus_c, p_data, data_length) != NRF_SUCCESS)			
+	{
+		/* repeat until sent */
+	}
+}
+
+
+/* Function to send data through NUS peripheral service. 
+   TODO: consider to implement a timeout */
+void conn_send_data_p_nus(uint8_t *p_data, uint16_t data_length)
+{
+	/* if data length is greater the max allowed value */
+	if(data_length > MAX_DATA_LENGTH)
+	{
+		/* limit data length and send anyway */
+		data_length = MAX_DATA_LENGTH;
+	}
+	else
+	{
+		/* length is valid, do nothing */
+	}
+
+	/* send data but do not send termination char */
+	while (ble_nus_string_send(&m_ble_nus_p, p_data, data_length) != NRF_SUCCESS)			
 	{
 		/* repeat until sent */
 	}
@@ -765,6 +788,8 @@ static void on_ble_evt(ble_evt_t * p_ble_evt)
 			{
 				/* device is connected as peripheral to a central */
 				connection_state = CONN_KE_CONNECTED_P;
+
+				nrf_gpio_pin_write(21, 0);
 			}
 			else
 			{
@@ -875,12 +900,16 @@ static void ble_nus_c_evt_handler(ble_nus_c_t * p_ble_nus_c, const ble_nus_c_evt
    it to the UART module */
 static void ble_nus_p_data_handler(ble_nus_t * p_nus, uint8_t * p_data, uint16_t length)
 {
+
+	nrf_gpio_pin_write(22, 0);
+
 	/* send received data from NUS to uart interface */
 	for (uint32_t i = 0; i < length; i++)
     {
         while(app_uart_put(p_data[i]) != NRF_SUCCESS);
     }
-    while(app_uart_put('\n') != NRF_SUCCESS);
+    app_uart_put(0x0D);
+	app_uart_put(0x0A);
 }
 
 
@@ -904,7 +933,7 @@ static void ble_c_evt_dispatch(ble_evt_t * p_ble_evt)
 static void ble_p_evt_dispatch(ble_evt_t * p_ble_evt)
 {
     ble_conn_params_on_ble_evt(p_ble_evt);
-    ble_nus_on_ble_evt(&m_nus, p_ble_evt);
+    ble_nus_on_ble_evt(&m_ble_nus_p, p_ble_evt);
     on_ble_evt(p_ble_evt);
     ble_advertising_on_ble_evt(p_ble_evt);  
 }
@@ -962,13 +991,13 @@ static void ble_stack_init(bool is_central)
 static void nus_p_init(void)
 {
     uint32_t       err_code;
-    ble_nus_init_t nus_init;
+    ble_nus_init_t nus_p_init_t;
     
-    memset(&nus_init, 0, sizeof(nus_init));
+    memset(&nus_p_init_t, 0, sizeof(nus_p_init_t));
 
-    nus_init.data_handler = ble_nus_p_data_handler;
+    nus_p_init_t.data_handler = ble_nus_p_data_handler;
     
-    err_code = ble_nus_init(&m_nus, &nus_init);
+    err_code = ble_nus_init(&m_ble_nus_p, &nus_p_init_t);
     APP_ERROR_CHECK(err_code);
 }
 

@@ -48,7 +48,8 @@ extern void conn_start_scan(void);
 extern void conn_stop_scan(void);
 extern bool conn_request_connection(uint8_t);
 extern bool conn_drop_connection(void);
-extern void conn_send_data_nus(uint8_t *, uint16_t);
+extern void conn_send_data_c_nus(uint8_t *, uint16_t);
+extern void conn_send_data_p_nus(uint8_t *, uint16_t);
 extern void conn_send_found_devices(void);
 
 

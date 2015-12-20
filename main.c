@@ -33,6 +33,10 @@
 /* Nordic common library */
 #include "nordic_common.h"
 
+/* nrf drivers */
+#include "nrf.h"
+#include "nrf_gpio.h"
+
 /* CONNECTION component */
 #include "conn_manager.h"
 
@@ -105,7 +109,7 @@ int main(void)
 	/* Initialize timers */
     APP_TIMER_INIT(APP_TIMER_PRESCALER, APP_TIMER_OP_QUEUE_SIZE, false);
 
-#if 0
+#if 1
     /* init pins */
     nrf_gpio_pin_dir_set(21, NRF_GPIO_PIN_DIR_OUTPUT);
     nrf_gpio_pin_dir_set(22, NRF_GPIO_PIN_DIR_OUTPUT);

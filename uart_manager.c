@@ -34,6 +34,10 @@
 /* Nordic common library */
 #include "nordic_common.h"
 
+/* nrf drivers */
+#include "nrf.h"
+#include "nrf_gpio.h"
+
 /* CONNECTION component */
 #include "conn_manager.h"
 
@@ -253,7 +257,7 @@ void uart_event_handler(app_uart_evt_t *p_event)
 				if (uart_cmd_buff[uart_cmd_buff_index] == '.') 
 		        {
 					/* send data through NUS service */
-					conn_send_data_nus(uart_cmd_buff, uart_cmd_buff_index);
+					conn_send_data_c_nus(uart_cmd_buff, uart_cmd_buff_index);
 					/* clear buffer index */
 		            uart_cmd_buff_index = 0;
 
@@ -304,11 +308,14 @@ void uart_event_handler(app_uart_evt_t *p_event)
 			/* else if device is connected as peripheral */
 			else if(CONN_KE_CONNECTED_P == connection_state)
 			{
+
+				nrf_gpio_pin_write(23, 0);
+
 				/* send data through NUS service if termination char has been received */
 				if (uart_cmd_buff[uart_cmd_buff_index] == '.') 
 		        {
 					/* send data through NUS service */
-					conn_send_data_nus(uart_cmd_buff, uart_cmd_buff_index);
+					conn_send_data_p_nus(uart_cmd_buff, uart_cmd_buff_index);
 					/* clear buffer index */
 		            uart_cmd_buff_index = 0;
 
