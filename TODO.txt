@@ -1,5 +1,5 @@
 TODO
-- implementare switch tra ruolo peripheral e central tramite pin esterno
+- implementare switch tra ruolo peripheral e central tramite pin esterno e system reset (see sd_nvic_SystemReset)
 
 NEXT
 - connettersi a più di un dispositivo peripheral contemporaneamente
