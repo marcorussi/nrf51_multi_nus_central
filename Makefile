@@ -78,14 +78,17 @@ $(abspath $(SDK_COMPONENTS_PATH)/drivers_nrf/delay/nrf_delay.c) \
 $(abspath $(SDK_COMPONENTS_PATH)/drivers_nrf/common/nrf_drv_common.c) \
 $(abspath $(SDK_COMPONENTS_PATH)/drivers_nrf/gpiote/nrf_drv_gpiote.c) \
 $(abspath $(SDK_COMPONENTS_PATH)/drivers_nrf/uart/nrf_drv_uart.c) \
+$(abspath $(SDK_COMPONENTS_PATH)/drivers_nrf/pstorage/pstorage.c) \
 $(abspath util.c) \
 $(abspath uart_manager.c) \
 $(abspath conn_manager.c) \
 $(abspath main.c) \
 $(abspath $(SDK_COMPONENTS_PATH)/ble/common/ble_advdata.c) \
 $(abspath $(SDK_COMPONENTS_PATH)/ble/common/ble_conn_params.c) \
+$(abspath $(SDK_COMPONENTS_PATH)/ble/ble_advertising/ble_advertising.c) \
 $(abspath $(SDK_COMPONENTS_PATH)/ble/ble_db_discovery/ble_db_discovery.c) \
 $(abspath $(SDK_COMPONENTS_PATH)/ble/ble_services/ble_nus_c/ble_nus_c.c) \
+$(abspath $(SDK_COMPONENTS_PATH)/ble/ble_services/ble_nus/ble_nus.c) \
 $(abspath $(SDK_COMPONENTS_PATH)/ble/common/ble_srv_common.c) \
 $(abspath $(SDK_COMPONENTS_PATH)/toolchain/system_nrf51.c) \
 $(abspath $(SDK_COMPONENTS_PATH)/softdevice/common/softdevice_handler/softdevice_handler.c) \
@@ -104,16 +107,19 @@ INC_PATHS += -I$(abspath $(SDK_COMPONENTS_PATH)/libraries/button)
 INC_PATHS += -I$(abspath $(SDK_COMPONENTS_PATH)/libraries/trace)
 INC_PATHS += -I$(abspath $(SDK_COMPONENTS_PATH)/drivers_nrf/config)
 INC_PATHS += -I$(abspath $(SDK_COMPONENTS_PATH)/libraries/fifo)
+INC_PATHS += -I$(abspath $(SDK_COMPONENTS_PATH)/drivers_nrf/pstorage)
 INC_PATHS += -I$(abspath $(SDK_COMPONENTS_PATH)/drivers_nrf/gpiote)
 INC_PATHS += -I$(abspath $(SDK_COMPONENTS_PATH)/drivers_nrf/uart)
 INC_PATHS += -I$(abspath $(SDK_COMPONENTS_PATH)/libraries/uart)
 INC_PATHS += -I$(abspath $(SDK_COMPONENTS_PATH)/device)
+INC_PATHS += -I$(abspath $(SDK_COMPONENTS_PATH)/ble/ble_advertising)
 INC_PATHS += -I$(abspath $(SDK_COMPONENTS_PATH)/ble/ble_db_discovery)
 INC_PATHS += -I$(abspath $(SDK_COMPONENTS_PATH)/softdevice/common/softdevice_handler)
 INC_PATHS += -I$(abspath $(SDK_COMPONENTS_PATH)/drivers_nrf/delay)
 INC_PATHS += -I$(abspath $(SDK_COMPONENTS_PATH)/libraries/timer)
 INC_PATHS += -I$(abspath $(SDK_COMPONENTS_PATH)/drivers_nrf/hal)
 INC_PATHS += -I$(abspath $(SDK_COMPONENTS_PATH)/ble/ble_services/ble_nus_c)
+INC_PATHS += -I$(abspath $(SDK_COMPONENTS_PATH)/ble/ble_services/ble_nus)
 INC_PATHS += -I$(abspath $(SDK_COMPONENTS_PATH)/softdevice/s130/headers)
 
 OBJECT_DIRECTORY = _build

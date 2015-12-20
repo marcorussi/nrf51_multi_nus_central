@@ -30,8 +30,10 @@
 typedef enum
 {
 	CONN_KE_NOT_INIT,
-	CONN_KE_CONNECTED,
-	CONN_KE_DISCONNECTED,
+	CONN_KE_INIT_P,
+	CONN_KE_INIT_C,
+	CONN_KE_CONNECTED_P,
+	CONN_KE_CONNECTED_C,
 	CONN_KE_UNKNOWN
 } conn_ke_state;
 
@@ -40,7 +42,7 @@ typedef enum
 
 /* ---------- Exported functions prototypes ----------- */
 
-extern void conn_init(void);
+extern void conn_init(bool);
 extern conn_ke_state conn_get_state(void);
 extern void conn_start_scan(void);
 extern void conn_stop_scan(void);

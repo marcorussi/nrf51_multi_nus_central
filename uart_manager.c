@@ -243,8 +243,8 @@ void uart_event_handler(app_uart_evt_t *p_event)
 			/* get connection state */
 			conn_ke_state connection_state = conn_get_state();
 
-			/* if device is connected */
-			if((CONN_KE_CONNECTED == connection_state)
+			/* if device is connected as central */
+			if((CONN_KE_CONNECTED_C == connection_state)
 			&& (online_command_mode == false))
 			{
 				//nrf_gpio_pin_write(24, 0);
@@ -281,7 +281,7 @@ void uart_event_handler(app_uart_evt_t *p_event)
 				}
 			}
 			/* else if device is not connected */
-			else if((CONN_KE_DISCONNECTED == connection_state)
+			else if((CONN_KE_INIT_C == connection_state)
 				 || (online_command_mode == true))
 			{
 				if (uart_cmd_buff[uart_cmd_buff_index] == '.')
@@ -298,6 +298,31 @@ void uart_event_handler(app_uart_evt_t *p_event)
 					{
 						/* clear buffer index */
 						uart_cmd_buff_index = 0;
+					}
+				}
+			}
+			/* else if device is connected as peripheral */
+			else if(CONN_KE_CONNECTED_P == connection_state)
+			{
+				/* send data through NUS service if termination char has been received */
+				if (uart_cmd_buff[uart_cmd_buff_index] == '.') 
+		        {
+					/* send data through NUS service */
+					conn_send_data_nus(uart_cmd_buff, uart_cmd_buff_index);
+					/* clear buffer index */
+		            uart_cmd_buff_index = 0;
+
+					uart_send_string((uint8_t *)"SENT", 4); 
+		        }
+				else
+				{
+					/* increment buffer index */
+					uart_cmd_buff_index++;
+					/* if buffer overflow */
+					if(uart_cmd_buff_index >= UART_CMD_BUFFER_LENGTH)
+					{
+						/* clear buffer index */
+		            	uart_cmd_buff_index = 0;
 					}
 				}
 			}

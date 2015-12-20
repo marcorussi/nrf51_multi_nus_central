@@ -1,5 +1,5 @@
 TODO
-- mettere anche il ruolo peripheral assieme
+- implementare switch tra ruolo peripheral e central tramite pin esterno
 
 NEXT
 - connettersi a più di un dispositivo peripheral contemporaneamente

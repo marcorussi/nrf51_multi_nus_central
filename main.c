@@ -42,6 +42,21 @@
 /* APP components */
 #include "app_error.h"
 #include "app_uart.h"
+#include "app_timer.h"
+
+
+
+
+/* ------------ Local defines ------------- */
+
+/* Value of the RTC1 PRESCALER register. */   
+#define APP_TIMER_PRESCALER             0   
+
+/* Maximum number of simultaneously created timers. */                                                   
+#define APP_TIMER_MAX_TIMERS            2	
+
+/* Size of timer operation queues. */				    
+#define APP_TIMER_OP_QUEUE_SIZE         4   
 
 
 
@@ -87,6 +102,9 @@ static void power_manage(void)
 /* Main function */
 int main(void)
 {
+	/* Initialize timers */
+    APP_TIMER_INIT(APP_TIMER_PRESCALER, APP_TIMER_OP_QUEUE_SIZE, false);
+
 #if 0
     /* init pins */
     nrf_gpio_pin_dir_set(21, NRF_GPIO_PIN_DIR_OUTPUT);
@@ -98,11 +116,12 @@ int main(void)
 	nrf_gpio_pin_write(23, 1);
     nrf_gpio_pin_write(24, 1);
 #endif
+
     /* init UART */
     uart_init();
     
     /* init connection manager */
-    conn_init();
+    conn_init(false);
     
     uart_send_string((uint8_t *)"CIAO", 4);
 

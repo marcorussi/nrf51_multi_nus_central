@@ -47,7 +47,10 @@
 #include "ble_gap.h"
 #include "ble_hci.h"
 #include "ble_advdata.h"
-#include "ble_nus_c.h"
+#include "ble_advertising.h"
+#include "ble_conn_params.h"
+#include "ble_nus_c.h"	/* NUS central */
+#include "ble_nus.h"	/* NUS peripheral */
 #include "ble_db_discovery.h"
 
 /* UART component */
@@ -56,6 +59,7 @@
 /* APP components */
 #include "app_error.h"
 #include "app_uart.h"
+#include "app_timer.h"
 
 /* header file */
 #include "conn_manager.h"
@@ -64,6 +68,12 @@
 
 
 /* ---------- Local definitions ---------- */
+
+/* Include the service_changed characteristic. If not enabled, the server's database cannot be changed for the lifetime of the device. */
+#define IS_SRVC_CHANGED_CHARACT_PRESENT	0  
+                                         
+/* Name of device. Will be included in the advertising data. */
+#define DEVICE_NAME            	"ble_led_cube"     
 
 /* Default target device name and length */
 #define TARGET_DEV_NAME      	"ble_led_ctrl_01"  
@@ -84,7 +94,31 @@
 #define MAX_CONNECTION_INTERVAL MSEC_TO_UNITS(75, UNIT_1_25_MS) /**< Determines maximum connection interval in millisecond. */
 #define SLAVE_LATENCY           0                               /**< Determines slave latency in counts of connection events. */
 #define SUPERVISION_TIMEOUT     MSEC_TO_UNITS(4000, UNIT_10_MS) /**< Determines supervision time-out in units of 10 millisecond. */
-               
+
+/* The advertising interval (in units of 0.625 ms. This value corresponds to 40 ms). */
+#define APP_ADV_INTERVAL                64      
+
+/* The advertising timeout (in units of seconds). */                                    
+#define APP_ADV_TIMEOUT_IN_SECONDS      10    
+             
+/* Value of the RTC1 PRESCALER register. */   
+#define APP_TIMER_PRESCALER             0   
+
+/* Maximum number of simultaneously created timers. */                                                   
+#define APP_TIMER_MAX_TIMERS            2	
+
+/* Size of timer operation queues. */				    
+#define APP_TIMER_OP_QUEUE_SIZE         4   
+  
+/* Time from initiating event (connect or start of notification) to first time sd_ble_gap_conn_param_update is called (5 seconds). */          
+#define FIRST_CONN_PARAMS_UPDATE_DELAY  APP_TIMER_TICKS(5000, APP_TIMER_PRESCALER) 
+
+/* Time between each call to sd_ble_gap_conn_param_update after the first call (30 seconds). */ 
+#define NEXT_CONN_PARAMS_UPDATE_DELAY   APP_TIMER_TICKS(30000, APP_TIMER_PRESCALER) 
+
+/* Number of attempts before giving up the connection parameter negotiation. */
+#define MAX_CONN_PARAMS_UPDATE_COUNT    3    
+
 /* UUID fields sizes */                                                 
 #define UUID16_SIZE             2                            
 #define UUID32_SIZE	        	4                              
@@ -114,6 +148,15 @@ typedef struct
 
 
 /* ---------- Local variables ---------- */
+
+/* Structure to identify the Nordic UART Service. */
+static ble_nus_t                        m_nus;    
+
+/* Handle of the current connection. */
+static uint16_t                         m_conn_handle = BLE_CONN_HANDLE_INVALID;    
+
+/* Universally unique service identifier. */
+static ble_uuid_t                       m_adv_uuids[] = {{BLE_UUID_NUS_SERVICE, NUS_SERVICE_UUID_TYPE}};  
 
 /* NUS service structure */
 static ble_nus_c_t              m_ble_nus_c;
@@ -162,13 +205,23 @@ static conn_ke_state connection_state = CONN_KE_NOT_INIT;
 
 /* ---------- Local functions prototypes ---------- */
 
+static void gap_params_init(void);
+static void nus_p_init(void);
+static void on_conn_params_evt(ble_conn_params_evt_t *);
+static void conn_params_error_handler(uint32_t);
+static void conn_params_init(void);
+static void on_adv_evt(ble_adv_evt_t);
+static void advertising_init(void);
+static void ble_nus_p_data_handler(ble_nus_t *, uint8_t *, uint16_t);
+static void ble_p_evt_dispatch(ble_evt_t *);
+
 static bool is_target_name_present(const ble_gap_evt_adv_report_t *, uint8_t *, uint8_t *);
 static bool is_uuid_present(const ble_uuid_t *, const ble_gap_evt_adv_report_t *);
 static uint8_t get_devices_list_id(ble_gap_addr_t);
 static void on_ble_evt(ble_evt_t *);
 static void ble_nus_c_evt_handler(ble_nus_c_t *, const ble_nus_c_evt_t *);
-static void ble_evt_dispatch(ble_evt_t *);
-static void ble_stack_init(void);
+static void ble_c_evt_dispatch(ble_evt_t *);
+static void ble_stack_init(bool);
 static void nus_c_init(void);
 
 
@@ -177,22 +230,47 @@ static void nus_c_init(void);
 /* ------------ Exported functions implementation --------------- */
 
 /* Function to init the connection manager */
-void conn_init(void)
+void conn_init(bool is_central)
 {
     uint32_t err_code;
    
-    /* init BLE stack */
-    ble_stack_init();
-    
-    /* init database discovery */
-    err_code = ble_db_discovery_init();
-    APP_ERROR_CHECK(err_code);
-    
-    /* init NUS service */
-    nus_c_init();
+	/* if central role */
+	if(is_central == true)
+	{
+		/* init BLE stack */
+		ble_stack_init(true);
 
-	/* connection manager initialised and not connected */
-	connection_state = CONN_KE_DISCONNECTED;
+		/* init database discovery */
+		err_code = ble_db_discovery_init();
+		APP_ERROR_CHECK(err_code);
+		
+		/* init NUS client service */
+		nus_c_init();
+
+		/* connection manager initialised as central and not connected */
+		connection_state = CONN_KE_INIT_C;
+	}
+	/* else if peripheral or any other invalid boolean values */
+	else
+	{
+		/* init BLE stack */
+		ble_stack_init(false);
+		/* init GAP parameters */
+		gap_params_init();
+		/* init NUS peripheral service */
+		nus_p_init();
+		/* init advertising */
+		advertising_init();
+		/* init connection parameters */
+		conn_params_init();
+
+		/* start advertising */
+		err_code = ble_advertising_start(BLE_ADV_MODE_FAST);
+		APP_ERROR_CHECK(err_code);
+
+		/* connection manager initialised as peripheral and not connected */
+		connection_state = CONN_KE_INIT_P;
+	}
 }
 
 
@@ -343,7 +421,133 @@ void conn_send_found_devices(void)
 
 /* ---------- Local functions implementation ---------- */
 
-/* Reads an advertising report and checks if the target name is present.
+
+/* PERIPHERAL: Function for the GAP initialization.
+   This function will set up all the necessary GAP (Generic Access Profile) parameters of 
+   the device. It also sets the permissions and appearance */
+static void gap_params_init(void)
+{
+    uint32_t                err_code;
+    ble_gap_conn_params_t   gap_conn_params;
+    ble_gap_conn_sec_mode_t sec_mode;
+
+    BLE_GAP_CONN_SEC_MODE_SET_OPEN(&sec_mode);
+    
+    err_code = sd_ble_gap_device_name_set(&sec_mode,
+                                          (const uint8_t *) DEVICE_NAME,
+                                          strlen(DEVICE_NAME));
+    APP_ERROR_CHECK(err_code);
+
+    memset(&gap_conn_params, 0, sizeof(gap_conn_params));
+
+    gap_conn_params.min_conn_interval = MIN_CONNECTION_INTERVAL;
+    gap_conn_params.max_conn_interval = MAX_CONNECTION_INTERVAL;
+    gap_conn_params.slave_latency     = SLAVE_LATENCY;
+    gap_conn_params.conn_sup_timeout  = SUPERVISION_TIMEOUT;
+
+    err_code = sd_ble_gap_ppcp_set(&gap_conn_params);
+    APP_ERROR_CHECK(err_code);
+}
+
+
+/* PERIPHERAL: Function for handling an event from the Connection Parameters Module.
+   This function will be called for all events in the Connection Parameters Module
+   which are passed to the application.
+   All this function does is to disconnect. This could have been done by simply setting
+   the disconnect_on_fail config parameter, but instead we use the event handler
+   mechanism to demonstrate its use */
+static void on_conn_params_evt(ble_conn_params_evt_t * p_evt)
+{
+    uint32_t err_code;
+    
+    if(p_evt->evt_type == BLE_CONN_PARAMS_EVT_FAILED)
+    {
+        err_code = sd_ble_gap_disconnect(m_conn_handle, BLE_HCI_CONN_INTERVAL_UNACCEPTABLE);
+        APP_ERROR_CHECK(err_code);
+    }
+}
+
+
+/* PERIPHERAL: Function for handling errors from the Connection Parameters module.
+   Error code containing information about what went wrong */
+static void conn_params_error_handler(uint32_t nrf_error)
+{
+    APP_ERROR_HANDLER(nrf_error);
+}
+
+
+/* PERIPHERAL: Function for initializing the Connection Parameters module */
+static void conn_params_init(void)
+{
+    uint32_t               err_code;
+    ble_conn_params_init_t cp_init;
+    
+    memset(&cp_init, 0, sizeof(cp_init));
+
+    cp_init.p_conn_params                  = NULL;
+    cp_init.first_conn_params_update_delay = FIRST_CONN_PARAMS_UPDATE_DELAY;
+    cp_init.next_conn_params_update_delay  = NEXT_CONN_PARAMS_UPDATE_DELAY;
+    cp_init.max_conn_params_update_count   = MAX_CONN_PARAMS_UPDATE_COUNT;
+    cp_init.start_on_notify_cccd_handle    = BLE_GATT_HANDLE_INVALID;
+    cp_init.disconnect_on_fail             = false;
+    cp_init.evt_handler                    = on_conn_params_evt;
+    cp_init.error_handler                  = conn_params_error_handler;
+    
+    err_code = ble_conn_params_init(&cp_init);
+    APP_ERROR_CHECK(err_code);
+}
+
+
+/* PERIPHERAL: Function for handling advertising events.
+   This function will be called for advertising events which are passed to the application */
+static void on_adv_evt(ble_adv_evt_t ble_adv_evt)
+{
+    uint32_t err_code;
+
+    switch (ble_adv_evt)
+    {
+        case BLE_ADV_EVT_FAST:
+	    	/* do nothing */
+            break;
+        case BLE_ADV_EVT_IDLE:
+	    	/* start advertising again */
+	    	err_code = ble_advertising_start(BLE_ADV_MODE_FAST);
+            APP_ERROR_CHECK(err_code);
+            break;
+        default:
+            break;
+    }
+}
+
+
+/* PERIPHERAL: Function for initializing the Advertising functionality */
+static void advertising_init(void)
+{
+    uint32_t      err_code;
+    ble_advdata_t advdata;
+    ble_advdata_t scanrsp;
+
+    // Build advertising data struct to pass into @ref ble_advertising_init.
+    memset(&advdata, 0, sizeof(advdata));
+    advdata.name_type          = BLE_ADVDATA_FULL_NAME;
+    advdata.include_appearance = false;
+    advdata.flags              = BLE_GAP_ADV_FLAGS_LE_ONLY_LIMITED_DISC_MODE;
+
+    memset(&scanrsp, 0, sizeof(scanrsp));
+    scanrsp.uuids_complete.uuid_cnt = sizeof(m_adv_uuids) / sizeof(m_adv_uuids[0]);
+    scanrsp.uuids_complete.p_uuids  = m_adv_uuids;
+
+    ble_adv_modes_config_t options = {0};
+    options.ble_adv_fast_enabled  = BLE_ADV_FAST_ENABLED;
+    options.ble_adv_fast_interval = APP_ADV_INTERVAL;
+    options.ble_adv_fast_timeout  = APP_ADV_TIMEOUT_IN_SECONDS;
+
+    err_code = ble_advertising_init(&advdata, &scanrsp, &options, on_adv_evt, NULL);
+    APP_ERROR_CHECK(err_code);
+}
+
+
+/* CENTRAL: Reads an advertising report and checks if the target name is present.
    Parameters: p_adv_report  Pointer to the advertisement report.
    Return: true if the target name is present in the advertisement report. Otherwise false  
 */
@@ -380,7 +584,7 @@ static bool is_target_name_present(const ble_gap_evt_adv_report_t *p_adv_report,
 }
 
 
-/* Reads an advertising report and checks if a uuid is present in the service list.
+/* CENTRAL: Reads an advertising report and checks if a uuid is present in the service list.
    The function is able to search for 16-bit, 32-bit and 128-bit service uuids. 
    Parameters: p_target_uuid The uuid to search fir
                p_adv_report  Pointer to the advertisement report.
@@ -459,7 +663,7 @@ static bool is_uuid_present(const ble_uuid_t *p_target_uuid,
 }
 
 
-/* Function for getting the device id of the found devices list.
+/* CENTRAL: Function for getting the device id of the found devices list.
    Parameters: gap_addr   Bluetooth low energy address.
 */
 static uint8_t get_devices_list_id(ble_gap_addr_t gap_addr)
@@ -542,16 +746,43 @@ static void on_ble_evt(ble_evt_t * p_ble_evt)
         }
         
         case BLE_GAP_EVT_CONNECTED:
-			uart_send_string((uint8_t *)"CONNECTED", 9);
-			/* device is connected */
-			connection_state = CONN_KE_CONNECTED;
-			/* reset uart */
-			uart_reset();
+			/* if role is central */
+			if(connection_state == CONN_KE_INIT_C)
+			{
+				uart_send_string((uint8_t *)"CONNECTED", 9);
+				/* device is connected as central to a peripheral */
+				connection_state = CONN_KE_CONNECTED_C;
+				/* reset uart */
+				uart_reset();
 
-            m_ble_nus_c.conn_handle = p_ble_evt->evt.gap_evt.conn_handle;
-            /* start discovery of services. The NUS Client waits for a discovery result */
-            err_code = ble_db_discovery_start(&m_ble_db_discovery, p_ble_evt->evt.gap_evt.conn_handle);
-            APP_ERROR_CHECK(err_code);
+		        m_ble_nus_c.conn_handle = p_ble_evt->evt.gap_evt.conn_handle;
+		        /* start discovery of services. The NUS Client waits for a discovery result */
+		        err_code = ble_db_discovery_start(&m_ble_db_discovery, p_ble_evt->evt.gap_evt.conn_handle);
+		        APP_ERROR_CHECK(err_code);
+			}
+			/* else if role is peripheral */
+			else if(connection_state == CONN_KE_INIT_P)
+			{
+				/* device is connected as peripheral to a central */
+				connection_state = CONN_KE_CONNECTED_P;
+			}
+			else
+			{
+				/* do nothing */
+			}
+            break;
+
+		case BLE_GAP_EVT_DISCONNECTED:
+			/* if role is peripheral */
+			if(connection_state == CONN_KE_CONNECTED_P)
+			{
+				/* device is not connected now */
+				connection_state = CONN_KE_INIT_P;
+			}
+			else
+			{
+				/* do nothing at the moment */
+			}
             break;
     
         case BLE_GAP_EVT_TIMEOUT:
@@ -573,6 +804,7 @@ static void on_ble_evt(ble_evt_t * p_ble_evt)
         case BLE_GAP_EVT_SEC_PARAMS_REQUEST:
             /* Pairing not supported */
             err_code = sd_ble_gap_sec_params_reply(p_ble_evt->evt.gap_evt.conn_handle, BLE_GAP_SEC_STATUS_PAIRING_NOT_SUPP, NULL, NULL);
+			//err_code = sd_ble_gap_sec_params_reply(m_conn_handle, BLE_GAP_SEC_STATUS_PAIRING_NOT_SUPP, NULL, NULL);
             APP_ERROR_CHECK(err_code);
             break;
     
@@ -582,6 +814,12 @@ static void on_ble_evt(ble_evt_t * p_ble_evt)
                                                     &p_gap_evt->params.conn_param_update_request.conn_params);
             APP_ERROR_CHECK(err_code);
             break;
+
+        case BLE_GATTS_EVT_SYS_ATTR_MISSING:
+            // No system attributes have been stored.
+            err_code = sd_ble_gatts_sys_attr_set(m_conn_handle, NULL, 0, 0);
+            APP_ERROR_CHECK(err_code);
+            break;
     
         default:
             break;
@@ -589,7 +827,7 @@ static void on_ble_evt(ble_evt_t * p_ble_evt)
 }
 
 
-/* Callback handling NUS Client events.
+/* CENTRAL: Callback handling NUS Client events.
    Handling events from the ble_nus_c module.
    This function is called to notify the application of NUS client events.
    Parameters: p_ble_nus_c   NUS Client Handle. This identifies the NUS client
@@ -614,6 +852,7 @@ static void ble_nus_c_evt_handler(ble_nus_c_t * p_ble_nus_c, const ble_nus_c_evt
             break;
         
         case BLE_NUS_C_EVT_NUS_RX_EVT:
+			/* send received data from NUS to uart interface */
             for (uint32_t i = 0; i < p_ble_nus_evt->data_len; i++)
             {
                 while(app_uart_put( p_ble_nus_evt->p_data[i]) != NRF_SUCCESS);
@@ -621,8 +860,8 @@ static void ble_nus_c_evt_handler(ble_nus_c_t * p_ble_nus_c, const ble_nus_c_evt
             break;
         
         case BLE_NUS_C_EVT_DISCONNECTED:
-			/* device is not connected */
-			connection_state = CONN_KE_DISCONNECTED;
+			/* device is not connected as central anymore */
+			connection_state = CONN_KE_INIT_C;
 			/* reset uart */
 			uart_reset();
 			uart_send_string((uint8_t *)"DISCONNECTED", 12);
@@ -631,12 +870,26 @@ static void ble_nus_c_evt_handler(ble_nus_c_t * p_ble_nus_c, const ble_nus_c_evt
 }
 
 
-/* Function for dispatching a BLE stack event to all modules with a BLE stack event handler.
+/* Function for handling the data from the Nordic UART Service.
+   This function will process the data received from the Nordic UART BLE Service and send
+   it to the UART module */
+static void ble_nus_p_data_handler(ble_nus_t * p_nus, uint8_t * p_data, uint16_t length)
+{
+	/* send received data from NUS to uart interface */
+	for (uint32_t i = 0; i < length; i++)
+    {
+        while(app_uart_put(p_data[i]) != NRF_SUCCESS);
+    }
+    while(app_uart_put('\n') != NRF_SUCCESS);
+}
+
+
+/* CENTRAL: Function for dispatching a BLE stack event to all modules with a BLE stack event handler.
    This function is called from the scheduler in the main loop after a BLE stack event has
    been received.
    Parameters: p_ble_evt   Bluetooth stack event.
 */
-static void ble_evt_dispatch(ble_evt_t * p_ble_evt)
+static void ble_c_evt_dispatch(ble_evt_t * p_ble_evt)
 {
     on_ble_evt(p_ble_evt);  
     ble_db_discovery_on_ble_evt(&m_ble_db_discovery, p_ble_evt);
@@ -644,28 +897,78 @@ static void ble_evt_dispatch(ble_evt_t * p_ble_evt)
 }
 
 
+/* PERIPHERAL: Function for dispatching a S110 SoftDevice event to all modules with a S110 SoftDevice 
+   event handler.
+   This function is called from the S110 SoftDevice event interrupt handler after a S110 
+   SoftDevice event has been received */
+static void ble_p_evt_dispatch(ble_evt_t * p_ble_evt)
+{
+    ble_conn_params_on_ble_evt(p_ble_evt);
+    ble_nus_on_ble_evt(&m_nus, p_ble_evt);
+    on_ble_evt(p_ble_evt);
+    ble_advertising_on_ble_evt(p_ble_evt);  
+}
+
+
 /* Function for initializing the BLE stack.
    Initializes the SoftDevice and the BLE event interrupt.
 */
-static void ble_stack_init(void)
+static void ble_stack_init(bool is_central)
 {
     uint32_t err_code;
 
-    // Initialize the SoftDevice handler module.
+    /* Initialize the SoftDevice handler module. */
     SOFTDEVICE_HANDLER_INIT(NRF_CLOCK_LFCLKSRC_XTAL_20_PPM, NULL);
 
-    // Enable BLE stack.
+    /* Enable BLE stack. */
     ble_enable_params_t ble_enable_params;
     memset(&ble_enable_params, 0, sizeof(ble_enable_params));
 
     ble_enable_params.gatts_enable_params.attr_tab_size   = BLE_GATTS_ATTR_TAB_SIZE_DEFAULT;
-    ble_enable_params.gatts_enable_params.service_changed = false;
 
+	/* if central role is required */
+	if(is_central == true)
+	{
+		ble_enable_params.gatts_enable_params.service_changed = false;
+	}
+	/* else if peripheral role or other invalid values */
+	else
+	{
+		ble_enable_params.gatts_enable_params.service_changed = IS_SRVC_CHANGED_CHARACT_PRESENT;
+	}
+
+	/* enable BLE */
     err_code = sd_ble_enable(&ble_enable_params);
     APP_ERROR_CHECK(err_code);
 
-    // Register with the SoftDevice handler module for BLE events.
-    err_code = softdevice_ble_evt_handler_set(ble_evt_dispatch);
+	/* if central role is required */
+	if(is_central == true)
+	{
+		/* Register with the SoftDevice handler module for BLE events in central role */
+		err_code = softdevice_ble_evt_handler_set(ble_c_evt_dispatch);
+		APP_ERROR_CHECK(err_code);
+	}
+	/* else if peripheral role or other invalid values */
+	else
+	{
+		/* Register with the SoftDevice handler module for BLE events in peripheral role */
+		err_code = softdevice_ble_evt_handler_set(ble_p_evt_dispatch);
+		APP_ERROR_CHECK(err_code);
+	}
+}
+
+
+/* PERIPHERAL: Function for initializing services that will be used by the application */
+static void nus_p_init(void)
+{
+    uint32_t       err_code;
+    ble_nus_init_t nus_init;
+    
+    memset(&nus_init, 0, sizeof(nus_init));
+
+    nus_init.data_handler = ble_nus_p_data_handler;
+    
+    err_code = ble_nus_init(&m_nus, &nus_init);
     APP_ERROR_CHECK(err_code);
 }
 
