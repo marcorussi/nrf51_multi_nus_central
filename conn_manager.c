@@ -120,15 +120,24 @@
 #define MAX_CONN_PARAMS_UPDATE_COUNT    3    
 
 /* UUID fields sizes */                                                 
-#define UUID16_SIZE             2                            
-#define UUID32_SIZE	        	4                              
-#define UUID128_SIZE            16                          
+#define UUID16_SIZE             		2                            
+#define UUID32_SIZE	        			4                              
+#define UUID128_SIZE            		16                          
 
 /* Device list length */
-#define DEVICE_LIST_LENGTH		4	
+#define DEVICE_LIST_LENGTH				4	
 
 /* Max data length through NUS service */
-#define MAX_DATA_LENGTH			BLE_NUS_MAX_DATA_LEN
+#define MAX_DATA_LENGTH					BLE_NUS_MAX_DATA_LEN
+
+/* connection pin number */
+#define CONN_PIN_NUMBER 				21	/* P0.21 */
+
+/* connection pin state as connected */
+#define CONNECTED_PIN_STATE				1	/* high */
+
+/* connection pin state as disconnected */
+#define DISCONNECTED_PIN_STATE			0	/* low */
 
 
 
@@ -233,6 +242,9 @@ static void nus_c_init(void);
 void conn_init(bool is_central)
 {
     uint32_t err_code;
+
+	/* init "connection" pin */
+	nrf_gpio_pin_dir_set(CONN_PIN_NUMBER, NRF_GPIO_PIN_DIR_OUTPUT);
    
 	/* if central role */
 	if(is_central == true)
@@ -590,8 +602,6 @@ static bool is_target_name_present(const ble_gap_evt_adv_report_t *p_adv_report,
 			/* copy name string */
 			strncpy((char *)name_string, (char *)(&p_data[index + 2]), (size_t)field_length);
 
-			//nrf_gpio_pin_write(21, 0);
-
 			/* copy name length */
 			*name_length = field_length;
 			
@@ -775,6 +785,8 @@ static void on_ble_evt(ble_evt_t * p_ble_evt)
 				uart_send_string((uint8_t *)"CONNECTED", 9);
 				/* device is connected as central to a peripheral */
 				connection_state = CONN_KE_CONNECTED_C;
+				/* set "connection" pin as connected */
+				nrf_gpio_pin_write(CONN_PIN_NUMBER, CONNECTED_PIN_STATE);
 				/* reset uart */
 				uart_reset();
 
@@ -788,8 +800,8 @@ static void on_ble_evt(ble_evt_t * p_ble_evt)
 			{
 				/* device is connected as peripheral to a central */
 				connection_state = CONN_KE_CONNECTED_P;
-
-				nrf_gpio_pin_write(21, 0);
+				/* set "connection" pin as connected */
+				nrf_gpio_pin_write(CONN_PIN_NUMBER, CONNECTED_PIN_STATE);
 			}
 			else
 			{
@@ -803,6 +815,8 @@ static void on_ble_evt(ble_evt_t * p_ble_evt)
 			{
 				/* device is not connected now */
 				connection_state = CONN_KE_INIT_P;
+				/* set "connection" pin as disconnected */
+				nrf_gpio_pin_write(CONN_PIN_NUMBER, DISCONNECTED_PIN_STATE);
 			}
 			else
 			{
@@ -868,9 +882,6 @@ static void ble_nus_c_evt_handler(ble_nus_c_t * p_ble_nus_c, const ble_nus_c_evt
             break;
         
         case BLE_NUS_C_EVT_FOUND_NUS_RX_CHARACTERISTIC:
-
-			//nrf_gpio_pin_write(21, 0);
-
 	    	/* RX characteristic found: enable notification on that */
             err_code = ble_nus_c_rx_notif_enable(p_ble_nus_c);
             APP_ERROR_CHECK(err_code);
@@ -890,6 +901,8 @@ static void ble_nus_c_evt_handler(ble_nus_c_t * p_ble_nus_c, const ble_nus_c_evt
 			/* reset uart */
 			uart_reset();
 			uart_send_string((uint8_t *)"DISCONNECTED", 12);
+			/* set "connection" pin as disconnected */
+			nrf_gpio_pin_write(CONN_PIN_NUMBER, DISCONNECTED_PIN_STATE);
             break;
     }
 }
@@ -900,9 +913,6 @@ static void ble_nus_c_evt_handler(ble_nus_c_t * p_ble_nus_c, const ble_nus_c_evt
    it to the UART module */
 static void ble_nus_p_data_handler(ble_nus_t * p_nus, uint8_t * p_data, uint16_t length)
 {
-
-	nrf_gpio_pin_write(22, 0);
-
 	/* send received data from NUS to uart interface */
 	for (uint32_t i = 0; i < length; i++)
     {

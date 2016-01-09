@@ -36,7 +36,6 @@
 
 /* nrf drivers */
 #include "nrf.h"
-#include "nrf_gpio.h"
 
 /* CONNECTION component */
 #include "conn_manager.h"
@@ -165,17 +164,13 @@ static void parse_uart_data(uint8_t *data_buff)
 			conn_start_scan();
 
 			uart_send_string((uint8_t *)"OK", 2);
-
-			//nrf_gpio_pin_write(22, 0);	
 		}
 		else if(0 == strncmp((const char *)data_buff, (const char *)"BLESCAN-", (size_t)8))
 		{
 			/* stop scanning */
 			conn_stop_scan();
 			/* send found devices */
-			conn_send_found_devices();
-
-			//nrf_gpio_pin_write(21, 0);	
+			conn_send_found_devices();	
 		}
 		else if(0 == strncmp((const char *)data_buff, (const char *)"BLECONN=", (size_t)8))
 		{
@@ -207,6 +202,12 @@ static void parse_uart_data(uint8_t *data_buff)
 			/* get back into online data mode */
 			online_command_mode = false;
 			uart_send_string((uint8_t *)"OK", 2);
+		}
+		else if(0 == strncmp((const char *)data_buff, (const char *)"RESET", (size_t)5))
+		{
+			uart_send_string((uint8_t *)"OK", 2);
+			/* system reset */
+			sd_nvic_SystemReset();
 		}
 		else if(0 == strncmp((const char *)data_buff, (const char *)"EU", (size_t)2))
 		{
@@ -251,8 +252,6 @@ void uart_event_handler(app_uart_evt_t *p_event)
 			if((CONN_KE_CONNECTED_C == connection_state)
 			&& (online_command_mode == false))
 			{
-				//nrf_gpio_pin_write(24, 0);
-
 				/* send data through NUS service if termination char has been received */
 				if (uart_cmd_buff[uart_cmd_buff_index] == '.') 
 		        {
@@ -308,9 +307,6 @@ void uart_event_handler(app_uart_evt_t *p_event)
 			/* else if device is connected as peripheral */
 			else if(CONN_KE_CONNECTED_P == connection_state)
 			{
-
-				nrf_gpio_pin_write(23, 0);
-
 				/* send data through NUS service if termination char has been received */
 				if (uart_cmd_buff[uart_cmd_buff_index] == '.') 
 		        {

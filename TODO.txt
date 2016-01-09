@@ -1,6 +1,4 @@
 TODO
-- implementare switch tra ruolo peripheral e central tramite pin esterno e system reset (see sd_nvic_SystemReset)
-
-NEXT
-- connettersi a più di un dispositivo peripheral contemporaneamente
-- considerare se implementare UART basata su nrf_uart
+- consider to slipt central and peripheral role in two different dedicated files
+- consider to connect simultaneously to more than one peripheral devices in cental role
+- consider to implement UART directly on top of the nrf_uart driver
