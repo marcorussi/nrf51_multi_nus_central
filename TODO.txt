@@ -1,4 +1,4 @@
 TODO
-- consider to slipt central and peripheral role in two different dedicated files
-- consider to connect simultaneously to more than one peripheral devices in cental role
+- consider to split central and peripheral roles in two different dedicated files
+- consider to connect simultaneously to more than one peripheral devices in central role
 - consider to implement UART directly on top of the nrf_uart driver
