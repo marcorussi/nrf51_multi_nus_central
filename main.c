@@ -119,7 +119,7 @@ int main(void)
     APP_TIMER_INIT(APP_TIMER_PRESCALER, APP_TIMER_OP_QUEUE_SIZE, false);
 
     /* init NUS role pin */
-	nrf_gpio_cfg_input(NUS_ROLE_PIN_NUMBER, NRF_GPIO_PIN_PULLDOWN);
+	nrf_gpio_cfg_input(NUS_ROLE_PIN_NUMBER, NRF_GPIO_PIN_PULLUP);
 	nrf_gpio_pin_dir_set(NUS_ROLE_PIN_NUMBER, NRF_GPIO_PIN_DIR_INPUT);
 
     /* init UART */

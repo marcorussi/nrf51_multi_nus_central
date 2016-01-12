@@ -130,6 +130,7 @@ extern void uart_send_string(uint8_t *data_string, uint8_t data_length)
 	{
 		app_uart_put(data_string[index]);
 	}
+	//app_uart_put('.');
 }
 
 
@@ -155,74 +156,80 @@ static void parse_uart_data(uint8_t *data_buff)
 	if(0 == strncmp((const char *)data_buff, (const char *)"AT+", (size_t)3))
     {
 		data_buff += 3;
-		if(0 == strncmp((const char *)data_buff, (const char *)"BLESCAN+", (size_t)8))
+		if(0 == strncmp((const char *)data_buff, (const char *)"SCAN+", (size_t)5))
 		{
-			data_buff += 8;
-
 			/* Start scanning for peripherals and initiate connection
 			   with devices that advertise NUS UUID. */
 			conn_start_scan();
 
-			uart_send_string((uint8_t *)"OK", 2);
+			uart_send_string((uint8_t *)"OK.", 3);
 		}
-		else if(0 == strncmp((const char *)data_buff, (const char *)"BLESCAN-", (size_t)8))
+		else if(0 == strncmp((const char *)data_buff, (const char *)"SCAN-", (size_t)5))
 		{
 			/* stop scanning */
 			conn_stop_scan();
 			/* send found devices */
-			conn_send_found_devices();	
+			//conn_send_found_devices();	
+			/* send number of found devices */
+			conn_send_num_found_devices();	
 		}
-		else if(0 == strncmp((const char *)data_buff, (const char *)"BLECONN=", (size_t)8))
+		else if(0 == strncmp((const char *)data_buff, (const char *)"FOUND=", (size_t)6))
 		{
-			data_buff += 8;
+			data_buff += 6;
+			/* send a specific found device */
+			conn_send_found_device((*data_buff & 0x0F));	
+		}
+		else if(0 == strncmp((const char *)data_buff, (const char *)"CONN=", (size_t)5))
+		{
+			data_buff += 5;
 			/* request a connection to a previously found device */
 			if (true == conn_request_connection((*data_buff & 0x0F)))
 			{
-				uart_send_string((uint8_t *)"WAIT", 4);
+				uart_send_string((uint8_t *)"WAIT.", 5);
 			}
 			else
 			{
-				uart_send_string((uint8_t *)"ERROR", 5);
+				uart_send_string((uint8_t *)"ERROR.", 6);
 			}
 		}
-		else if(0 == strncmp((const char *)data_buff, (const char *)"BLEDROP", (size_t)7))
+		else if(0 == strncmp((const char *)data_buff, (const char *)"DROP", (size_t)4))
 		{
 			/* drop an ongoing connection */
             if (true == conn_drop_connection())
             {
-				uart_send_string((uint8_t *)"WAIT", 4);
+				uart_send_string((uint8_t *)"WAIT.", 5);
             }
 			else
 			{
-				uart_send_string((uint8_t *)"ERROR", 5);
+				uart_send_string((uint8_t *)"ERROR.", 6);
 			}
 		}
-		else if(0 == strncmp((const char *)data_buff, (const char *)"BLEAUTO", (size_t)7))
+		else if(0 == strncmp((const char *)data_buff, (const char *)"AUTO", (size_t)4))
 		{
 			/* get back into online data mode */
 			online_command_mode = false;
-			uart_send_string((uint8_t *)"OK", 2);
+			uart_send_string((uint8_t *)"OK.", 3);
 		}
 		else if(0 == strncmp((const char *)data_buff, (const char *)"RESET", (size_t)5))
 		{
-			uart_send_string((uint8_t *)"OK", 2);
+			uart_send_string((uint8_t *)"OK.", 3);
 			/* system reset */
 			sd_nvic_SystemReset();
 		}
 		else if(0 == strncmp((const char *)data_buff, (const char *)"EU", (size_t)2))
 		{
-			uart_send_string((uint8_t *)"CHE", 3);
+			uart_send_string((uint8_t *)"CHE.", 4);
 		}
 		else
 		{
 			/* command is not supported */
-			uart_send_string((uint8_t *)"ERROR", 5);
+			uart_send_string((uint8_t *)"ERROR.", 6);
 		}
     }
     else
     {
 		/* invalid command string */
-		uart_send_string((uint8_t *)"ERROR", 5);
+		uart_send_string((uint8_t *)"ERROR.", 6);
     }
 }
 
@@ -260,7 +267,7 @@ void uart_event_handler(app_uart_evt_t *p_event)
 					/* clear buffer index */
 		            uart_cmd_buff_index = 0;
 
-					uart_send_string((uint8_t *)"SENT", 4); 
+					uart_send_string((uint8_t *)"SENT.", 5); 
 		        }
 				else if (uart_cmd_buff[uart_cmd_buff_index] == '*') 
 				{
@@ -269,7 +276,7 @@ void uart_event_handler(app_uart_evt_t *p_event)
 					/* enter in online command mode */
 					online_command_mode = true;
 
-					uart_send_string((uint8_t *)"OK", 2); 
+					uart_send_string((uint8_t *)"OK.", 3); 
 				}
 				else
 				{
@@ -315,7 +322,7 @@ void uart_event_handler(app_uart_evt_t *p_event)
 					/* clear buffer index */
 		            uart_cmd_buff_index = 0;
 
-					uart_send_string((uint8_t *)"SENT", 4); 
+					uart_send_string((uint8_t *)"SENT.", 5); 
 		        }
 				else
 				{

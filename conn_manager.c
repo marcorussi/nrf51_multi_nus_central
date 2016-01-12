@@ -125,7 +125,7 @@
 #define UUID128_SIZE            		16                          
 
 /* Device list length */
-#define DEVICE_LIST_LENGTH				4	
+#define DEVICE_LIST_LENGTH				6	
 
 /* Max data length through NUS service */
 #define MAX_DATA_LENGTH					BLE_NUS_MAX_DATA_LEN
@@ -415,7 +415,54 @@ void conn_send_data_p_nus(uint8_t *p_data, uint16_t data_length)
 }
 
 
-/* send found devices info through uart*/
+/* send a number of found devices */
+void conn_send_num_found_devices(void)
+{
+	char string[4];
+	/* build the string */
+	string[0] = 'O';
+	string[1] = 'K';
+	string[2] = '-';
+	string[3] = (char)(0x30 | devices_list_index);	/* ascii conversion */
+	/* send the string */
+	uart_send_string((uint8_t *)string, 4);
+	app_uart_put('.');
+}
+
+
+/* send a found device info according to passed index */
+void conn_send_found_device(uint8_t found_dev_index)
+{
+	char ascii_address[12];
+
+	uart_send_string((uint8_t *)"OK", 2);
+	app_uart_put('-');
+	/* check required device index */
+	if(found_dev_index < devices_list_index)
+	{
+		/* connvert and send the device address */
+		util_address_to_string(found_devices[found_dev_index].gap_addr.addr, ascii_address);
+		uart_send_string((uint8_t *)ascii_address, 12);
+		app_uart_put('-');
+		/* send device name */
+		if(found_devices[found_dev_index].name_length > 0)
+		{
+			uart_send_string(found_devices[found_dev_index].name, found_devices[found_dev_index].name_length-1);
+		}
+		else
+		{
+			uart_send_string((uint8_t *)"Unknown", 7);
+		}
+	}
+	else
+	{
+		uart_send_string((uint8_t *)"ERROR", 5);
+	}
+	app_uart_put('.');
+}
+
+
+/* send found devices info through uart */
 void conn_send_found_devices(void)
 {
 	uint8_t index;
@@ -427,28 +474,31 @@ void conn_send_found_devices(void)
 	{
 		app_uart_put((0x30 | index));
 		app_uart_put('-');
-		uart_send_string((uint8_t *)"ADDRESS:", 8);
+		//uart_send_string((uint8_t *)"ADDRESS:", 8);
 		/* connvert and send the device address */
 		util_address_to_string(found_devices[index].gap_addr.addr, ascii_address);
 		uart_send_string((uint8_t *)ascii_address, 12);
 		app_uart_put('-');
-		uart_send_string((uint8_t *)"NAME:", 5);
+		//uart_send_string((uint8_t *)"NAME:", 5);
 		/* send device name */
 		if(found_devices[index].name_length > 0)
 		{
-			uart_send_string(found_devices[index].name, found_devices[index].name_length);
+			uart_send_string(found_devices[index].name, found_devices[index].name_length-1);
 		}
 		else
 		{
 			uart_send_string((uint8_t *)"Unknown", 7);
 		}
-		app_uart_put(0x0D);
-		app_uart_put(0x0A);
+		//app_uart_put(0x0D);
+		//app_uart_put(0x0A);
+		app_uart_put('-');
 	}
 
-	uart_send_string((uint8_t *)"OK ", 3);
+	//uart_send_string((uint8_t *)"OK ", 3);
+	//app_uart_put('-');
 	app_uart_put((0x30 | devices_list_index));
 	app_uart_put('!');
+	app_uart_put('.');
 }
 
 
@@ -782,7 +832,7 @@ static void on_ble_evt(ble_evt_t * p_ble_evt)
 			/* if role is central */
 			if(connection_state == CONN_KE_INIT_C)
 			{
-				uart_send_string((uint8_t *)"CONNECTED", 9);
+				uart_send_string((uint8_t *)"CONNECTED.", 10);
 				/* device is connected as central to a peripheral */
 				connection_state = CONN_KE_CONNECTED_C;
 				/* set "connection" pin as connected */
@@ -828,7 +878,7 @@ static void on_ble_evt(ble_evt_t * p_ble_evt)
             if (p_gap_evt->params.timeout.src == BLE_GAP_TIMEOUT_SRC_SCAN)
             {
                 /* scan timed out */
-				uart_send_string((uint8_t *)"TIMEOUT", 7);
+				uart_send_string((uint8_t *)"TIMEOUT.", 8);
             }
             else if (p_gap_evt->params.timeout.src == BLE_GAP_TIMEOUT_SRC_CONN)
             {
@@ -900,7 +950,7 @@ static void ble_nus_c_evt_handler(ble_nus_c_t * p_ble_nus_c, const ble_nus_c_evt
 			connection_state = CONN_KE_INIT_C;
 			/* reset uart */
 			uart_reset();
-			uart_send_string((uint8_t *)"DISCONNECTED", 12);
+			uart_send_string((uint8_t *)"DISCONNECTED.", 13);
 			/* set "connection" pin as disconnected */
 			nrf_gpio_pin_write(CONN_PIN_NUMBER, DISCONNECTED_PIN_STATE);
             break;
