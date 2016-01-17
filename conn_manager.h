@@ -24,6 +24,14 @@
 
 
 
+/* ---------- Exported defines -------------- */
+
+/* Max num of storable and connectable devices */
+#define CONN_MAX_NUM_DEVICES		6
+
+
+
+
 /* ---------- Exported typedefs -------------- */
 
 /* Connection status typedef */
@@ -47,13 +55,11 @@ extern conn_ke_state conn_get_state(void);
 extern void conn_start_scan(void);
 extern void conn_stop_scan(void);
 extern bool conn_request_connection(uint8_t);
-extern bool conn_drop_connection(void);
-extern void conn_send_data_c_nus(uint8_t *, uint16_t);
+extern bool conn_drop_connection(uint8_t);
+extern void conn_send_data_c_nus(uint8_t, uint8_t *, uint16_t);
 extern void conn_send_data_p_nus(uint8_t *, uint16_t);
 extern void conn_send_num_found_devices(void);
 extern void conn_send_found_device(uint8_t);
-extern void conn_send_found_devices(void);
-
 
 
 

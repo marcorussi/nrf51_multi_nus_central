@@ -79,6 +79,9 @@ static uint8_t uart_cmd_buff_index = 0;
 /* Flag to indicate if online command mode is active */
 static bool online_command_mode = false;
 
+/* Index of connected devices for sending data */
+static uint8_t data_conn_index = 0xFF;
+
 
 
 
@@ -124,13 +127,10 @@ extern void uart_send_string(uint8_t *data_string, uint8_t data_length)
 {
 	uint8_t index;
 
-	//app_uart_put(0x0D);
-	//app_uart_put(0x0A);
 	for(index = 0; index < data_length; index++)
 	{
 		app_uart_put(data_string[index]);
 	}
-	//app_uart_put('.');
 }
 
 
@@ -168,8 +168,6 @@ static void parse_uart_data(uint8_t *data_buff)
 		{
 			/* stop scanning */
 			conn_stop_scan();
-			/* send found devices */
-			//conn_send_found_devices();	
 			/* send number of found devices */
 			conn_send_num_found_devices();	
 		}
@@ -186,18 +184,52 @@ static void parse_uart_data(uint8_t *data_buff)
 			if (true == conn_request_connection((*data_buff & 0x0F)))
 			{
 				uart_send_string((uint8_t *)"WAIT.", 5);
+
+				/* ATTENTION: consider to implement this index in a different way */
+				data_conn_index = (*data_buff & 0x0F);
 			}
 			else
 			{
 				uart_send_string((uint8_t *)"ERROR.", 6);
 			}
 		}
-		else if(0 == strncmp((const char *)data_buff, (const char *)"DROP", (size_t)4))
+		else if(0 == strncmp((const char *)data_buff, (const char *)"SWITCH=", (size_t)7))
 		{
+			data_buff += 7;
+			/* request a connection to a previously found device */
+			if ((*data_buff & 0x0F) < CONN_MAX_NUM_DEVICES)
+			{
+				/* ATTENTION: consider to implement this index in a different way */
+				data_conn_index = (*data_buff & 0x0F);
+
+				/* quit online command mode */
+				online_command_mode = false;
+
+				uart_send_string((uint8_t *)"OK.", 3);
+			}
+			else
+			{
+				uart_send_string((uint8_t *)"ERROR.", 6);
+			}
+		}
+		else if(0 == strncmp((const char *)data_buff, (const char *)"DROP=", (size_t)5))
+		{
+			data_buff += 5;
 			/* drop an ongoing connection */
-            if (true == conn_drop_connection())
+            if (true == conn_drop_connection((*data_buff & 0x0F)))
             {
 				uart_send_string((uint8_t *)"WAIT.", 5);
+
+				/* if current data index is the dropped one */
+				if(data_conn_index == (*data_buff & 0x0F))
+				{
+					/* clear data_conn_index */
+					data_conn_index = 0xFF;
+				}
+				else
+				{
+					/* keep current data_conn_index value */
+				}
             }
 			else
 			{
@@ -236,21 +268,20 @@ static void parse_uart_data(uint8_t *data_buff)
 
 /* Function for handling app_uart events.
    This function will receive a single character from the app_uart module and append it to 
-   a string. The string will be be sent over BLE when the last character received was a 
-   'new line' i.e '\n' (hex 0x0D) or if the string has reached a length of NUS_MAX_DATA_LENGTH.
+   a string. The string will be be sent over BLE when the last character received is a 
+   '.' character or if the string has reached a length of NUS_MAX_DATA_LENGTH.
 */
 void uart_event_handler(app_uart_evt_t *p_event)
 {
     /* manage event type */
     switch (p_event->evt_type)
     {
-        /**@snippet [Handling data from UART] */ 
+		/* manage data from UART */
         case APP_UART_DATA_READY:
 
 			/* TODO: consider to check uart_cmd_buff_index validity and clear it if invalid */
 
 			UNUSED_VARIABLE(app_uart_get(&uart_cmd_buff[uart_cmd_buff_index]));
-			//app_uart_put(uart_cmd_buff[uart_cmd_buff_index]);
 
 			/* get connection state */
 			conn_ke_state connection_state = conn_get_state();
@@ -262,12 +293,20 @@ void uart_event_handler(app_uart_evt_t *p_event)
 				/* send data through NUS service if termination char has been received */
 				if (uart_cmd_buff[uart_cmd_buff_index] == '.') 
 		        {
-					/* send data through NUS service */
-					conn_send_data_c_nus(uart_cmd_buff, uart_cmd_buff_index);
-					/* clear buffer index */
-		            uart_cmd_buff_index = 0;
+					/* check data_conn_index validity */
+					if(data_conn_index < CONN_MAX_NUM_DEVICES)
+					{
+						/* send data through NUS service */
+						conn_send_data_c_nus(data_conn_index, uart_cmd_buff, uart_cmd_buff_index);
+						/* clear buffer index */
+				        uart_cmd_buff_index = 0;
 
-					uart_send_string((uint8_t *)"SENT.", 5); 
+						//uart_send_string((uint8_t *)"SENT.", 5); 
+					}
+					else
+					{
+						/* invalid data_conn_index */
+					}
 		        }
 				else if (uart_cmd_buff[uart_cmd_buff_index] == '*') 
 				{
@@ -343,7 +382,6 @@ void uart_event_handler(app_uart_evt_t *p_event)
 			}
             break;
 
-        /**@snippet [Handling data from UART] */ 
         case APP_UART_COMMUNICATION_ERROR:
             APP_ERROR_HANDLER(p_event->data.error_communication);
             break;

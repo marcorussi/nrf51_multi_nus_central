@@ -22,6 +22,9 @@
 */
 
 
+/* TODO: check passed drop connection index -> remember connected indexes */
+
+
 /* ---------- Inclusions ---------- */
 
 /* Compiler libraries */
@@ -125,7 +128,10 @@
 #define UUID128_SIZE            		16                          
 
 /* Device list length */
-#define DEVICE_LIST_LENGTH				6	
+#define DEVICE_LIST_LENGTH				CONN_MAX_NUM_DEVICES
+
+/* Number of maximum simultaneous connections */
+#define NUM_OF_CONNECTIONS				DEVICE_LIST_LENGTH	/* ATTENTION: num of simultaneous connection is the same of device list length */
 
 /* Max data length through NUS service */
 #define MAX_DATA_LENGTH					BLE_NUS_MAX_DATA_LEN
@@ -162,16 +168,16 @@ typedef struct
 static ble_nus_t                        m_ble_nus_p;    
 
 /* Handle of the current connection. */
-static uint16_t                         m_conn_handle = BLE_CONN_HANDLE_INVALID;    
+static uint16_t                         m_p_conn_handle = BLE_CONN_HANDLE_INVALID;    
 
 /* Universally unique service identifier. */
 static ble_uuid_t                       m_adv_uuids[] = {{BLE_UUID_NUS_SERVICE, NUS_SERVICE_UUID_TYPE}};  
 
 /* Structure to identify the Nordic UART central service. */
-static ble_nus_c_t              m_ble_nus_c;
+static ble_nus_c_t              		m_ble_nus_c;
 
 /* Database discovery structure */
-static ble_db_discovery_t       m_ble_db_discovery;
+static ble_db_discovery_t       		m_ble_db_discovery;
 
 /* Connection parameters requested for connection. */
 static const ble_gap_conn_params_t m_connection_param =
@@ -205,6 +211,11 @@ static device_info found_devices[DEVICE_LIST_LENGTH];
 
 /* Found devices list index */
 static uint8_t devices_list_index = 0;
+
+/* Index of pending NUS connection in the list */
+static uint8_t pending_nus_conn_index = 0xFF;
+
+static uint16_t active_conn_handles[NUM_OF_CONNECTIONS];
 
 /* Flag to indicate if device is connected */
 static conn_ke_state connection_state = CONN_KE_NOT_INIT;
@@ -323,6 +334,9 @@ bool conn_request_connection(uint8_t device_index)
 	/* if requested index (from ascii to int) is lower than num of devices */
 	if(device_index < devices_list_index)
 	{
+		/* store pending connection index */
+		pending_nus_conn_index = device_index;
+
 		/* request a connection */
 		err_code = sd_ble_gap_connect(&found_devices[device_index].gap_addr,
 		                              &m_scan_params,
@@ -347,22 +361,32 @@ bool conn_request_connection(uint8_t device_index)
 
 
 /* Function to drop an ongoing connection */
-bool conn_drop_connection(void)
+bool conn_drop_connection(uint8_t nus_conn_index)
 {
 	uint32_t err_code;
 	bool success = false;
 
-	/* try to disconnect */
-	err_code = sd_ble_gap_disconnect(m_ble_nus_c.conn_handle, BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
-    if (err_code != NRF_ERROR_INVALID_STATE)
-    {
-        APP_ERROR_CHECK(err_code);
-		/* success */
-		success = true;
-    }
+	/* check connection index validity */
+	if(nus_conn_index < NUM_OF_CONNECTIONS)
+	{
+		/* get related connection handle */
+		m_ble_nus_c.conn_handle = active_conn_handles[nus_conn_index];
+		/* try to disconnect */
+		err_code = sd_ble_gap_disconnect(m_ble_nus_c.conn_handle, BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
+		if (err_code != NRF_ERROR_INVALID_STATE)
+		{
+		    APP_ERROR_CHECK(err_code);
+			/* success */
+			success = true;
+		}
+		else
+		{
+			/* fail to disconnect */ 
+		}
+	}
 	else
 	{
-		/* fail to disconnect */ 
+		/* invalid connection index: do nothing */
 	}
 
 	return success;
@@ -371,23 +395,34 @@ bool conn_drop_connection(void)
 
 /* Function to send data through NUS central service. 
    TODO: consider to implement a timeout */
-void conn_send_data_c_nus(uint8_t *p_data, uint16_t data_length)
+void conn_send_data_c_nus(uint8_t nus_conn_index, uint8_t *p_data, uint16_t data_length)
 {
-	/* if data length is greater the max allowed value */
-	if(data_length > MAX_DATA_LENGTH)
+	/* check connection index validity */
+	if(nus_conn_index < NUM_OF_CONNECTIONS)
 	{
-		/* limit data length and send anyway */
-		data_length = MAX_DATA_LENGTH;
+		/* if data length is greater the max allowed value */
+		if(data_length > MAX_DATA_LENGTH)
+		{
+			/* limit data length and send anyway */
+			data_length = MAX_DATA_LENGTH;
+		}
+		else
+		{
+			/* length is valid, do nothing */
+		}
+
+		/* get related connection handle */
+		m_ble_nus_c.conn_handle = active_conn_handles[nus_conn_index];
+
+		/* send data but do not send termination char */
+		while (ble_nus_c_string_send(&m_ble_nus_c, p_data, data_length) != NRF_SUCCESS)			
+		{
+			/* repeat until sent */
+		}
 	}
 	else
 	{
-		/* length is valid, do nothing */
-	}
-
-	/* send data but do not send termination char */
-	while (ble_nus_c_string_send(&m_ble_nus_c, p_data, data_length) != NRF_SUCCESS)			
-	{
-		/* repeat until sent */
+		/* invalid connection index: do nothing */
 	}
 }
 
@@ -435,8 +470,7 @@ void conn_send_found_device(uint8_t found_dev_index)
 {
 	char ascii_address[12];
 
-	uart_send_string((uint8_t *)"OK", 2);
-	app_uart_put('-');
+	uart_send_string((uint8_t *)"OK-", 3);
 	/* check required device index */
 	if(found_dev_index < devices_list_index)
 	{
@@ -458,46 +492,6 @@ void conn_send_found_device(uint8_t found_dev_index)
 	{
 		uart_send_string((uint8_t *)"ERROR", 5);
 	}
-	app_uart_put('.');
-}
-
-
-/* send found devices info through uart */
-void conn_send_found_devices(void)
-{
-	uint8_t index;
-	char ascii_address[12];
-
-	app_uart_put(0x0D);
-	app_uart_put(0x0A);
-	for(index = 0; index < devices_list_index; index++)
-	{
-		app_uart_put((0x30 | index));
-		app_uart_put('-');
-		//uart_send_string((uint8_t *)"ADDRESS:", 8);
-		/* connvert and send the device address */
-		util_address_to_string(found_devices[index].gap_addr.addr, ascii_address);
-		uart_send_string((uint8_t *)ascii_address, 12);
-		app_uart_put('-');
-		//uart_send_string((uint8_t *)"NAME:", 5);
-		/* send device name */
-		if(found_devices[index].name_length > 0)
-		{
-			uart_send_string(found_devices[index].name, found_devices[index].name_length-1);
-		}
-		else
-		{
-			uart_send_string((uint8_t *)"Unknown", 7);
-		}
-		//app_uart_put(0x0D);
-		//app_uart_put(0x0A);
-		app_uart_put('-');
-	}
-
-	//uart_send_string((uint8_t *)"OK ", 3);
-	//app_uart_put('-');
-	app_uart_put((0x30 | devices_list_index));
-	app_uart_put('!');
 	app_uart_put('.');
 }
 
@@ -547,7 +541,7 @@ static void on_conn_params_evt(ble_conn_params_evt_t * p_evt)
     
     if(p_evt->evt_type == BLE_CONN_PARAMS_EVT_FAILED)
     {
-        err_code = sd_ble_gap_disconnect(m_conn_handle, BLE_HCI_CONN_INTERVAL_UNACCEPTABLE);
+        err_code = sd_ble_gap_disconnect(m_p_conn_handle, BLE_HCI_CONN_INTERVAL_UNACCEPTABLE);
         APP_ERROR_CHECK(err_code);
     }
 }
@@ -612,21 +606,24 @@ static void advertising_init(void)
     ble_advdata_t advdata;
     ble_advdata_t scanrsp;
 
-    // Build advertising data struct to pass into @ref ble_advertising_init.
+    /* prepare advertising data struct to pass into ble_advertising_init */
     memset(&advdata, 0, sizeof(advdata));
     advdata.name_type          = BLE_ADVDATA_FULL_NAME;
     advdata.include_appearance = false;
     advdata.flags              = BLE_GAP_ADV_FLAGS_LE_ONLY_LIMITED_DISC_MODE;
 
+	/* prepare scan response data struct to pass into ble_advertising_init */
     memset(&scanrsp, 0, sizeof(scanrsp));
     scanrsp.uuids_complete.uuid_cnt = sizeof(m_adv_uuids) / sizeof(m_adv_uuids[0]);
     scanrsp.uuids_complete.p_uuids  = m_adv_uuids;
 
+	/* prepare scan response data struct to pass into ble_advertising_init */
     ble_adv_modes_config_t options = {0};
     options.ble_adv_fast_enabled  = BLE_ADV_FAST_ENABLED;
     options.ble_adv_fast_interval = APP_ADV_INTERVAL;
     options.ble_adv_fast_timeout  = APP_ADV_TIMEOUT_IN_SECONDS;
 
+	/* init advertising */
     err_code = ble_advertising_init(&advdata, &scanrsp, &options, on_adv_evt, NULL);
     APP_ERROR_CHECK(err_code);
 }
@@ -773,7 +770,7 @@ static uint8_t get_devices_list_id(ble_gap_addr_t gap_addr)
 	return device_index;
 }
 
-
+uint8_t pippo = 0;
 /* Function for handling the Application's BLE Stack events.
    Parameters: p_ble_evt   Bluetooth stack event.
 */
@@ -790,7 +787,7 @@ static void on_ble_evt(ble_evt_t * p_ble_evt)
             const ble_gap_evt_adv_report_t *p_adv_report = &p_gap_evt->params.adv_report;
 
 			index = get_devices_list_id(p_adv_report->peer_addr);
-			/* id device has been already found */
+			/* id device has been already found or list is full */
 			if( index != 0xFF)
 			{
 				/* device already found */
@@ -807,49 +804,59 @@ static void on_ble_evt(ble_evt_t * p_ble_evt)
 				strncpy((char *)(found_devices[index].gap_addr.addr), (char *)(p_adv_report->peer_addr.addr), (size_t)6);
 				/* copy address type */
 				found_devices[index].gap_addr.addr_type = p_adv_report->peer_addr.addr_type;
-			}
-
-			/* if scan response */
-			//if(p_adv_report->scan_rsp == 1)
-			//{
+			
 				if (is_target_name_present(p_adv_report, found_devices[index].name, &found_devices[index].name_length))
 				{
 					found_devices[index].valid_target |= 1;
 				}	
-			//}
-			/* else if advertisement */
-			//else
-			//{
+			
 				if (is_uuid_present(&m_nus_uuid, p_adv_report))
 			    {
 					found_devices[index].valid_target |= 2;
 				}
-			//}
+			}
             break;
         }
-        
         case BLE_GAP_EVT_CONNECTED:
+		{
 			/* if role is central */
-			if(connection_state == CONN_KE_INIT_C)
+			if((connection_state == CONN_KE_INIT_C)
+			|| (connection_state == CONN_KE_CONNECTED_C))
 			{
-				uart_send_string((uint8_t *)"CONNECTED.", 10);
-				/* device is connected as central to a peripheral */
-				connection_state = CONN_KE_CONNECTED_C;
-				/* set "connection" pin as connected */
-				nrf_gpio_pin_write(CONN_PIN_NUMBER, CONNECTED_PIN_STATE);
-				/* reset uart */
-				uart_reset();
+				/* if pending connection index is valid */
+				if(pending_nus_conn_index < NUM_OF_CONNECTIONS)
+				{
+					uart_send_string((uint8_t *)"CONNECTED.", 10);
+					/* device is connected as central to a peripheral */
+					connection_state = CONN_KE_CONNECTED_C;
+					/* set "connection" pin as connected */
+					nrf_gpio_pin_write(CONN_PIN_NUMBER, CONNECTED_PIN_STATE);
+					/* reset uart */
+					uart_reset();
 
-		        m_ble_nus_c.conn_handle = p_ble_evt->evt.gap_evt.conn_handle;
-		        /* start discovery of services. The NUS Client waits for a discovery result */
-		        err_code = ble_db_discovery_start(&m_ble_db_discovery, p_ble_evt->evt.gap_evt.conn_handle);
-		        APP_ERROR_CHECK(err_code);
+					/* store related connection handle */
+					active_conn_handles[pending_nus_conn_index] = p_ble_evt->evt.gap_evt.conn_handle;
+					/* set current handle as this one */
+				    m_ble_nus_c.conn_handle = p_ble_evt->evt.gap_evt.conn_handle;
+
+					/* reset pending NUS connection index */
+					pending_nus_conn_index = 0xFF;
+				    /* start discovery of services. The NUS Client waits for a discovery result */
+				    err_code = ble_db_discovery_start(&m_ble_db_discovery, p_ble_evt->evt.gap_evt.conn_handle);
+				    APP_ERROR_CHECK(err_code);
+				}
+				else
+				{
+					/* internal error: do nothing */
+				}
 			}
 			/* else if role is peripheral */
 			else if(connection_state == CONN_KE_INIT_P)
 			{
 				/* device is connected as peripheral to a central */
 				connection_state = CONN_KE_CONNECTED_P;
+				/* store connection handle */
+				m_p_conn_handle = p_ble_evt->evt.gap_evt.conn_handle;;
 				/* set "connection" pin as connected */
 				nrf_gpio_pin_write(CONN_PIN_NUMBER, CONNECTED_PIN_STATE);
 			}
@@ -858,13 +865,16 @@ static void on_ble_evt(ble_evt_t * p_ble_evt)
 				/* do nothing */
 			}
             break;
-
+		}
 		case BLE_GAP_EVT_DISCONNECTED:
+		{
 			/* if role is peripheral */
 			if(connection_state == CONN_KE_CONNECTED_P)
 			{
 				/* device is not connected now */
 				connection_state = CONN_KE_INIT_P;
+				/* restore connection handle to invalid */
+				m_p_conn_handle = BLE_CONN_HANDLE_INVALID;
 				/* set "connection" pin as disconnected */
 				nrf_gpio_pin_write(CONN_PIN_NUMBER, DISCONNECTED_PIN_STATE);
 			}
@@ -873,8 +883,9 @@ static void on_ble_evt(ble_evt_t * p_ble_evt)
 				/* do nothing at the moment */
 			}
             break;
-    
+    	}
         case BLE_GAP_EVT_TIMEOUT:
+		{
             if (p_gap_evt->params.timeout.src == BLE_GAP_TIMEOUT_SRC_SCAN)
             {
                 /* scan timed out */
@@ -889,27 +900,29 @@ static void on_ble_evt(ble_evt_t * p_ble_evt)
 				/* do nothing */
 			}
             break;
-            
+        }
         case BLE_GAP_EVT_SEC_PARAMS_REQUEST:
-            /* Pairing not supported */
+		{
+            /* ATTENTION: Pairing not supported at the moment */
             err_code = sd_ble_gap_sec_params_reply(p_ble_evt->evt.gap_evt.conn_handle, BLE_GAP_SEC_STATUS_PAIRING_NOT_SUPP, NULL, NULL);
-			//err_code = sd_ble_gap_sec_params_reply(m_conn_handle, BLE_GAP_SEC_STATUS_PAIRING_NOT_SUPP, NULL, NULL);
             APP_ERROR_CHECK(err_code);
             break;
-    
+    	}
         case BLE_GAP_EVT_CONN_PARAM_UPDATE_REQUEST:
+		{
             /* Accepting parameters requested by peer. */
             err_code = sd_ble_gap_conn_param_update(p_gap_evt->conn_handle,
                                                     &p_gap_evt->params.conn_param_update_request.conn_params);
             APP_ERROR_CHECK(err_code);
             break;
-
+		}
         case BLE_GATTS_EVT_SYS_ATTR_MISSING:
+		{
             // No system attributes have been stored.
-            err_code = sd_ble_gatts_sys_attr_set(m_conn_handle, NULL, 0, 0);
+            err_code = sd_ble_gatts_sys_attr_set(m_p_conn_handle, NULL, 0, 0);
             APP_ERROR_CHECK(err_code);
             break;
-    
+    	}
         default:
             break;
     }
@@ -943,9 +956,11 @@ static void ble_nus_c_evt_handler(ble_nus_c_t * p_ble_nus_c, const ble_nus_c_evt
             {
                 while(app_uart_put( p_ble_nus_evt->p_data[i]) != NRF_SUCCESS);
             }
+			app_uart_put('.');
             break;
         
         case BLE_NUS_C_EVT_DISCONNECTED:
+			/* TODO: consider to clear related connection handle */
 			/* device is not connected as central anymore */
 			connection_state = CONN_KE_INIT_C;
 			/* reset uart */
@@ -968,8 +983,6 @@ static void ble_nus_p_data_handler(ble_nus_t * p_nus, uint8_t * p_data, uint16_t
     {
         while(app_uart_put(p_data[i]) != NRF_SUCCESS);
     }
-    app_uart_put(0x0D);
-	app_uart_put(0x0A);
 }
 
 
@@ -980,9 +993,28 @@ static void ble_nus_p_data_handler(ble_nus_t * p_nus, uint8_t * p_data, uint16_t
 */
 static void ble_c_evt_dispatch(ble_evt_t * p_ble_evt)
 {
+	uint8_t i = 0;
+
     on_ble_evt(p_ble_evt);  
     ble_db_discovery_on_ble_evt(&m_ble_db_discovery, p_ble_evt);
-    ble_nus_c_on_ble_evt(&m_ble_nus_c,p_ble_evt);
+
+	/* seek connection index from the received connection handle */
+	while((active_conn_handles[i] != p_ble_evt->evt.gap_evt.conn_handle)
+	&&    (i < NUM_OF_CONNECTIONS))
+	{
+		i++;
+	}
+	if(i < NUM_OF_CONNECTIONS)
+	{
+		/* get related connection handle */
+		m_ble_nus_c.conn_handle = active_conn_handles[i];
+		/* connection index found: manage NUS client event */
+		ble_nus_c_on_ble_evt(&m_ble_nus_c, p_ble_evt);
+	}
+	else
+	{
+		/* connection index not found: do nothing */
+	}
 }
 
 
@@ -1065,13 +1097,15 @@ static void nus_p_init(void)
 /* Function for initializing the NUS Client. */
 static void nus_c_init(void)
 {
-    uint32_t         err_code;
+    uint32_t err_code;
     ble_nus_c_init_t nus_c_init_t;
     
+	/* same init structure for all clients */
     nus_c_init_t.evt_handler = ble_nus_c_evt_handler;
-    
-    err_code = ble_nus_c_init(&m_ble_nus_c, &nus_c_init_t);
-    APP_ERROR_CHECK(err_code);
+
+	/* init NUS client */
+	err_code = ble_nus_c_init(&m_ble_nus_c, &nus_c_init_t);
+	APP_ERROR_CHECK(err_code);
 }
 
 
