@@ -77,10 +77,8 @@ static uint8_t uart_cmd_buff[UART_CMD_BUFFER_LENGTH];
 static uint8_t uart_cmd_buff_index = 0;
 
 /* Flag to indicate if online command mode is active */
-static bool online_command_mode = false;
-
-/* Index of connected devices for sending data */
-static uint8_t data_conn_index = 0xFF;
+/* Init in command mode */
+static bool is_command_mode = true;
 
 
 
@@ -139,9 +137,6 @@ extern void uart_reset(void)
 {
 	/* reset buffer index */
 	uart_cmd_buff_index = 0;
-
-	/* online data mode is not active */
-	online_command_mode = false;
 }
 
 
@@ -176,6 +171,8 @@ static void parse_uart_data(uint8_t *data_buff)
 			data_buff += 6;
 			/* send a specific found device */
 			conn_send_found_device((*data_buff & 0x0F));	
+
+			/* response is sent in called function */
 		}
 		else if(0 == strncmp((const char *)data_buff, (const char *)"CONN=", (size_t)5))
 		{
@@ -183,10 +180,10 @@ static void parse_uart_data(uint8_t *data_buff)
 			/* request a connection to a previously found device */
 			if (true == conn_request_connection((*data_buff & 0x0F)))
 			{
-				uart_send_string((uint8_t *)"WAIT.", 5);
+				/* enter into data mode */
+				is_command_mode = false;
 
-				/* ATTENTION: consider to implement this index in a different way */
-				data_conn_index = (*data_buff & 0x0F);
+				uart_send_string((uint8_t *)"WAIT.", 5);
 			}
 			else
 			{
@@ -196,14 +193,11 @@ static void parse_uart_data(uint8_t *data_buff)
 		else if(0 == strncmp((const char *)data_buff, (const char *)"SWITCH=", (size_t)7))
 		{
 			data_buff += 7;
-			/* request a connection to a previously found device */
-			if ((*data_buff & 0x0F) < CONN_MAX_NUM_DEVICES)
+			/* switch connection index */
+			if(true == conn_switch_conn((*data_buff & 0x0F)))
 			{
-				/* ATTENTION: consider to implement this index in a different way */
-				data_conn_index = (*data_buff & 0x0F);
-
-				/* quit online command mode */
-				online_command_mode = false;
+				/* enter into data mode */
+				is_command_mode = false;
 
 				uart_send_string((uint8_t *)"OK.", 3);
 			}
@@ -219,17 +213,6 @@ static void parse_uart_data(uint8_t *data_buff)
             if (true == conn_drop_connection((*data_buff & 0x0F)))
             {
 				uart_send_string((uint8_t *)"WAIT.", 5);
-
-				/* if current data index is the dropped one */
-				if(data_conn_index == (*data_buff & 0x0F))
-				{
-					/* clear data_conn_index */
-					data_conn_index = 0xFF;
-				}
-				else
-				{
-					/* keep current data_conn_index value */
-				}
             }
 			else
 			{
@@ -238,8 +221,9 @@ static void parse_uart_data(uint8_t *data_buff)
 		}
 		else if(0 == strncmp((const char *)data_buff, (const char *)"AUTO", (size_t)4))
 		{
-			/* get back into online data mode */
-			online_command_mode = false;
+			/* enter into data mode */
+			is_command_mode = false;
+
 			uart_send_string((uint8_t *)"OK.", 3);
 		}
 		else if(0 == strncmp((const char *)data_buff, (const char *)"RESET", (size_t)5))
@@ -278,61 +262,15 @@ void uart_event_handler(app_uart_evt_t *p_event)
     {
 		/* manage data from UART */
         case APP_UART_DATA_READY:
-
+		{
 			/* TODO: consider to check uart_cmd_buff_index validity and clear it if invalid */
 
 			UNUSED_VARIABLE(app_uart_get(&uart_cmd_buff[uart_cmd_buff_index]));
 
-			/* get connection state */
-			conn_ke_state connection_state = conn_get_state();
-
-			/* if device is connected as central */
-			if((CONN_KE_CONNECTED_C == connection_state)
-			&& (online_command_mode == false))
+			/* if command mode is enabled */
+			if(is_command_mode == true)
 			{
-				/* send data through NUS service if termination char has been received */
-				if (uart_cmd_buff[uart_cmd_buff_index] == '.') 
-		        {
-					/* check data_conn_index validity */
-					if(data_conn_index < CONN_MAX_NUM_DEVICES)
-					{
-						/* send data through NUS service */
-						conn_send_data_c_nus(data_conn_index, uart_cmd_buff, uart_cmd_buff_index);
-						/* clear buffer index */
-				        uart_cmd_buff_index = 0;
-
-						//uart_send_string((uint8_t *)"SENT.", 5); 
-					}
-					else
-					{
-						/* invalid data_conn_index */
-					}
-		        }
-				else if (uart_cmd_buff[uart_cmd_buff_index] == '*') 
-				{
-					/* clear buffer index */
-		            uart_cmd_buff_index = 0;
-					/* enter in online command mode */
-					online_command_mode = true;
-
-					uart_send_string((uint8_t *)"OK.", 3); 
-				}
-				else
-				{
-					/* increment buffer index */
-					uart_cmd_buff_index++;
-					/* if buffer overflow */
-					if(uart_cmd_buff_index >= UART_CMD_BUFFER_LENGTH)
-					{
-						/* clear buffer index */
-		            	uart_cmd_buff_index = 0;
-					}
-				}
-			}
-			/* else if device is not connected */
-			else if((CONN_KE_INIT_C == connection_state)
-				 || (online_command_mode == true))
-			{
+				/* consider oncoming data commands */
 				if (uart_cmd_buff[uart_cmd_buff_index] == '.')
 				{
 					parse_uart_data(uart_cmd_buff);
@@ -350,19 +288,27 @@ void uart_event_handler(app_uart_evt_t *p_event)
 					}
 				}
 			}
-			/* else if device is connected as peripheral */
-			else if(CONN_KE_CONNECTED_P == connection_state)
+			/* else if data mode */
+			else
 			{
 				/* send data through NUS service if termination char has been received */
 				if (uart_cmd_buff[uart_cmd_buff_index] == '.') 
-		        {
+			    {
+					
 					/* send data through NUS service */
-					conn_send_data_p_nus(uart_cmd_buff, uart_cmd_buff_index);
+					conn_send_data_nus(uart_cmd_buff, uart_cmd_buff_index);
 					/* clear buffer index */
-		            uart_cmd_buff_index = 0;
+				    uart_cmd_buff_index = 0;
+			    }
+				else if (uart_cmd_buff[uart_cmd_buff_index] == '*') 
+				{
+					/* clear buffer index */
+			        uart_cmd_buff_index = 0;
+					/* enter into configuration mode */
+					is_command_mode = true;
 
-					uart_send_string((uint8_t *)"SENT.", 5); 
-		        }
+					uart_send_string((uint8_t *)"OK.", 3); 
+				}
 				else
 				{
 					/* increment buffer index */
@@ -371,25 +317,22 @@ void uart_event_handler(app_uart_evt_t *p_event)
 					if(uart_cmd_buff_index >= UART_CMD_BUFFER_LENGTH)
 					{
 						/* clear buffer index */
-		            	uart_cmd_buff_index = 0;
+						uart_cmd_buff_index = 0;
 					}
 				}
 			}
-			else
-			{
-				/* it should never arrive here, invalid/unknown connection state */
-				/* do nothing */
-			}
             break;
-
+		}
         case APP_UART_COMMUNICATION_ERROR:
+		{
             APP_ERROR_HANDLER(p_event->data.error_communication);
             break;
-
+		}
         case APP_UART_FIFO_ERROR:
+		{
             APP_ERROR_HANDLER(p_event->data.error_code);
             break;
-
+		}
         default:
             break;
     }

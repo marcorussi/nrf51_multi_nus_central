@@ -62,15 +62,6 @@
 /* Size of timer operation queues. */				    
 #define APP_TIMER_OP_QUEUE_SIZE         4   
 
-/* pin number for detecting required NUS role */
-#define NUS_ROLE_PIN_NUMBER				1	/* P0.1 */
-
-/* pin state for peripheral role */
-#define PERIPHERAL_ROLE_PIN_STATUS		1	/* high */
-
-/* pin state for central role */
-#define CENTRAL_ROLE_PIN_STATUS			0	/* low */
-
 
 
 
@@ -118,35 +109,23 @@ int main(void)
 	/* Initialize timers */
     APP_TIMER_INIT(APP_TIMER_PRESCALER, APP_TIMER_OP_QUEUE_SIZE, false);
 
-    /* init NUS role pin */
-	nrf_gpio_cfg_input(NUS_ROLE_PIN_NUMBER, NRF_GPIO_PIN_PULLUP);
-	nrf_gpio_pin_dir_set(NUS_ROLE_PIN_NUMBER, NRF_GPIO_PIN_DIR_INPUT);
-
     /* init UART */
     uart_init();
 
-	/* check role pin status */
-	if(nrf_gpio_pin_read(NUS_ROLE_PIN_NUMBER) == CENTRAL_ROLE_PIN_STATUS)
-	{
-		/* init connection manager as NUS central role */
-    	conn_init(true);
-		uart_send_string((uint8_t *)"CENTRAL", 7);
-	}
-	else if(nrf_gpio_pin_read(NUS_ROLE_PIN_NUMBER) == PERIPHERAL_ROLE_PIN_STATUS)
-	{
-		/* init connection manager as NUS peripheral role */
-    	conn_init(false);
-		uart_send_string((uint8_t *)"PERIPHERAL", 10);
-	}
-	else
-	{
-		uart_send_string((uint8_t *)"BYEBYE", 6);
-		/* invalid value, internal error, got to sleep */
-		sleep_mode_enter();
-	}
+	/* init connection manager */
+	conn_init();
 
+	uart_send_string((uint8_t *)"CENTRAL", 7);
+	
     for (;;)
     {
         power_manage();
     }
 }
+
+
+
+
+/* End of file */
+
+
