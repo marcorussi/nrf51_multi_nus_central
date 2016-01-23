@@ -22,10 +22,10 @@
 
 
 #ATTENTON: modify following names and paths as required
-PROJECT_NAME := ble_cube
+PROJECT_NAME := nrf51_multi_nus_central
 NRFJPROG_PATH := /opt/nrfjprog
 SDK_PATH := /opt/nRF51_SDK_10.0.0_dc26b5e
-LINKER_SCRIPT := ble_cube_nrf51.ld
+LINKER_SCRIPT := multi_nus_c_nrf51.ld
 GNU_INSTALL_ROOT := /home/marco/ARMToolchain/gcc-arm-none-eabi-4_9-2015q2
 GNU_VERSION := 4.9.3
 GNU_PREFIX := arm-none-eabi
