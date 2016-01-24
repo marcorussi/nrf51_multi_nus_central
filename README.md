@@ -35,6 +35,8 @@ In configuration mode the following commands are valid:
 
 In data mode any received data unless the "." terminator is sent to the last indexed connected device. The special character for escaping from data mode and so entering into configuration mode is "*".
 
+**The UART TX and RX lines are respectively P0.12 and P0.13.**
+
 
 
 **Install**
