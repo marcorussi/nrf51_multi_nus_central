@@ -10,21 +10,21 @@ The module manages oncoming serial data according to two modes:
 For easily detecting an end of string in the firmware and on the host side, **commands and data must be terminated by "." character in order to be managed by the module according to current mode. Similarly, all responses are terminated by the same "." character.**.
 
 In configuration mode the following commands are valid:
-- "AT+SCAN+": start a scan of devices with UUID service. Responses:
+- "AT+SCAN+.": start a scan of devices with UUID service. Responses:
   - "OK.": scan started successfully.
-- "AT+SCAN-": stop an eventual ongoing scan. Responses:
+- "AT+SCAN-.": stop an eventual ongoing scan. Responses:
   - "OK-*n*.": scan stopped successfully. The *n* value represents the number of found devices with UUID service.
-- "AT+FOUND=*i*": get address and name of found device at index *i*. The index *i* must be between 0 and *n*-1 (number of found devices menus 1) previously obtained by AT+SCAN- command. Responses:
+- "AT+FOUND=*i*.": get address and name of found device at index *i*. The index *i* must be between 0 and *n*-1 (number of found devices menus 1) previously obtained by AT+SCAN- command. Responses:
   - "OK-*address*-*name*.": a valid device index has been requested. The *address* field is the 12 characters bluetooth address and the *name* field is the device name. If name was not found then *name* field is substituted by "Unknown" string;
   - "ERROR.": a not valid index has been requested. This means that 0 devices have been found or requested index is greater than *n*-1 (number of found devices menus 1).
-- "AT+CONN=*i*": request a connection of device at index *i*. Responses:
+- "AT+CONN=*i*.": request a connection of device at index *i*. Responses:
   - "WAIT.": required connection has been successfully requested. In case of success a "OK." response will follow;
   - "OK.": a valid connection has been established. This response follows a "WAIT." response. After this reponse the module enters into data mode and so no more commands will be parsed. Any received data will be sent to the just connected device;
   - "ERROR.": required connection request failed. This meand that the index *i* is not valid or related connection request failed.
-- "AT+SWITCH=*i*": request to switch next data to device at index *i*. This implies that a previous successfull connection is established with that device. Responses:
+- "AT+SWITCH=*i*.": request to switch next data to device at index *i*. This implies that a previous successfull connection is established with that device. Responses:
   - "OK.": switch request performed successfully;
   - "ERROR.": switch request failed.
-- "AT+DROP=*i*": drop an established connection with device at index *i*. This implies that a previous successfull connection is established with that device. Responses:
+- "AT+DROP=*i*.": drop an established connection with device at index *i*. This implies that a previous successfull connection is established with that device. Responses:
   - "WAIT.": a connection drop request has been successfully requested. In case of success a "OK." response will follow;
   - "OK.": connection has been dropped successfully. This response follows a "WAIT." response;
   - "ERROR.": required connection drop failed. This meand that the index *i* is not valid or related drop request failed.
