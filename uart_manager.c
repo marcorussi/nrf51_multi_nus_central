@@ -235,16 +235,16 @@ static void parse_uart_data(uint8_t *data_buff)
 			/* system reset */
 			sd_nvic_SystemReset();
 		}
-		else if(0 == strncmp((const char *)data_buff, (const char *)"EU", (size_t)2))
-		{
-			uart_send_string((uint8_t *)"CHE.", 4);
-		}
 		else
 		{
 			/* command is not supported */
 			uart_send_string((uint8_t *)"ERROR.", 6);
 		}
     }
+	else if(0 == strncmp((const char *)data_buff, (const char *)"AT?", (size_t)3))
+	{
+		uart_send_string((uint8_t *)"OK.", 3);
+	}
     else
     {
 		/* invalid command string */
