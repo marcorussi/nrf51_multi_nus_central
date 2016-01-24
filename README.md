@@ -10,6 +10,8 @@ The module manages oncoming serial data according to two modes:
 For easily detecting an end of string in the firmware and on the host side, **commands and data must be terminated by "." character in order to be managed by the module according to current mode. Similarly, all responses are terminated by the same "." character.**.
 
 In configuration mode the following commands are valid:
+- "AT?.": query commands parser. Responses:
+  - "OK.": commands parser is running properly.
 - "AT+SCAN+.": start a scan of devices with UUID service. Responses:
   - "OK.": scan started successfully.
 - "AT+SCAN-.": stop an eventual ongoing scan. Responses:
