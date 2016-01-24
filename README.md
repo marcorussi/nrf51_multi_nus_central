@@ -39,6 +39,8 @@ In data mode any received data unless the "." terminator is sent to the last ind
 
 **The UART TX and RX lines are respectively P0.12 and P0.13.**
 
+**In addition, find my related Arduino host application here:** https://github.com/marcorussi/arduino_nus_host
+
 
 
 **Install**
