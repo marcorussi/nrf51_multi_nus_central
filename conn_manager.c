@@ -117,7 +117,6 @@ typedef struct
 	ble_gap_addr_t gap_addr;
 	uint8_t name[21];
 	uint8_t name_length;
-	uint8_t valid_target;
 } device_info;
 
 
