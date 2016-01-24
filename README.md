@@ -1,7 +1,7 @@
 # nrf51_nus_central
 A multilink NUS central role firmware with Nordic NUS service through UART AT commands. Developed under Ubuntu environment using a nrf51 PCA10028 development kit. The firmware is based on S130 from Nordic SDK 10.x.x.
 
-This NUS client allows to connect to several devices simultaneously. It is possible to switch from an established connection to another one for sending data to any device at any time. In fact, once an established connection can be considered as a data link between the two devices where data pass through. A specific command allows to switch to any of the existing data links and so next oncoming data will be sent through the last switched data link.
+This software allows to connect to several devices simultaneously. It is possible to switch from an established connection to another one for sending data to any device at any time. In fact, once an established connection can be considered as a data link between the two devices where data pass through. A specific command allows to switch to any of the existing data links and so next oncoming data will be sent through the last switched data link.
 
 The module manages oncoming serial data according to two modes:
 - **configuration mode**: the module parses received data for detecting an eventual valid command and then executes it if found;
