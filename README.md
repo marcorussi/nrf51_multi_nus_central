@@ -7,11 +7,13 @@ The module manages oncoming serial data according to two modes:
 - **configuration mode**: the module parses received data for detecting an eventual valid command and then executes it if found;
 - **data mode**: any received data are sent through the last indexed device with an established connection.
 
+For easily detecting an end of string in the firmware and on the host side, **commands and data must be terminated by "." character in order to be managed by the module according to current mode. Similarly, all responses are terminated by the same "." character.**.
+
 In configuration mode the following commands are valid:
 - "AT+SCAN+": start a scan of devices with UUID service. Responses:
   - "OK.": scan started successfully.
 - "AT+SCAN-": stop an eventual ongoing scan. Responses:
-  - "OK-*n*": scan stopped successfully. The *n* value represents the number of found devices with UUID service.
+  - "OK-*n*.": scan stopped successfully. The *n* value represents the number of found devices with UUID service.
 - "AT+FOUND=*i*": get address and name of found device at index *i*. The index *i* must be between 0 and *n*-1 (number of found devices menus 1) previously obtained by AT+SCAN- command. Responses:
   - "OK-*address*-*name*.": a valid device index has been requested. The *address* field is the 12 characters bluetooth address and the *name* field is the device name. If name was not found then *name* field is substituted by "Unknown" string;
   - "ERROR.": a not valid index has been requested. This means that 0 devices have been found or requested index is greater than *n*-1 (number of found devices menus 1).
@@ -31,7 +33,7 @@ In configuration mode the following commands are valid:
 - "AT+RESET.": perform a software reset of the module. Responses:
 - "OK.": reset request accepted. This response is immediately followed by a software reset.
 
-In data mode any received data unless the '.' terminator is sent to the last indexed connected device. The special character for escaping from data mode and so entering into configuration mode is "*".
+In data mode any received data unless the "." terminator is sent to the last indexed connected device. The special character for escaping from data mode and so entering into configuration mode is "*".
 
 
 
