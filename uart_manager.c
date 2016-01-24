@@ -22,6 +22,9 @@
 */
 
 
+// TODO: consider to implement UART directly on top of the nrf_uart driver
+
+
 /* ---------- Inclusions ---------- */
 
 /* Compiler libraries */
