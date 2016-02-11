@@ -33,7 +33,7 @@ In configuration mode the following commands are valid:
 - "AT+AUTO.": enter into data mode with the last valid device index. This implies that an escape character has been previously sent during the data mode of an established connection. Responses:
   - "OK.": entered successfully in data mode.
 - "AT+RESET.": perform a software reset of the module. Responses:
-- "OK.": reset request accepted. This response is immediately followed by a software reset.
+  - "OK.": reset request accepted. This response is immediately followed by a software reset.
 
 In data mode any received data unless the "." terminator is sent to the last indexed connected device. The special character for escaping from data mode and so entering into configuration mode is "*".
 
