@@ -218,11 +218,11 @@ void conn_start_scan(void)
 {
 	uint32_t err_code;
 
-    err_code = sd_ble_gap_scan_start(&m_scan_params);
-    APP_ERROR_CHECK(err_code);
-
 	/* reset device list index */
 	devices_list_index = 0;
+
+    err_code = sd_ble_gap_scan_start(&m_scan_params);
+    APP_ERROR_CHECK(err_code);
 }
 
 
@@ -351,10 +351,18 @@ void conn_send_data_nus(uint8_t *p_data, uint16_t data_length)
 		/* length is valid, do nothing */
 	}
 
-	/* send data but do not send termination char */
-	while (ble_nus_c_string_send(&m_ble_nus_c, p_data, data_length) != NRF_SUCCESS)			
+	/* if current connection handle is valid */
+	if(m_ble_nus_c.conn_handle != BLE_CONN_HANDLE_INVALID)
 	{
-		/* repeat until sent */
+		/* send data but do not send termination char */
+		while (ble_nus_c_string_send(&m_ble_nus_c, p_data, data_length) != NRF_SUCCESS)			
+		{
+			/* repeat until sent */
+		}
+	}
+	else
+	{
+		/* do not send anything. TODO: consider to return a fail flag value */
 	}
 }
 
